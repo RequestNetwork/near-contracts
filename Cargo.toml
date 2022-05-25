@@ -1,0 +1,29 @@
+[package]
+name = "request_conversion_proxy"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+near-sdk = "3.1.0"
+serde = "1.0.118"
+# near-sdk = "4.0.0-pre.4"
+hex = "0.4"
+
+[dev-dependencies]
+near-sdk-sim = "3.2.0"
+conversion_proxy = { path = "./conversion_proxy" }
+mocks = { path = "./mocks" }
+
+[profile.release]
+codegen-units = 1
+# Tell `rustc` to optimize for small code size.
+opt-level = "z"
+lto = true
+debug = false
+panic = "abort"
+overflow-checks = true
+
+[workspace]
+members = ["conversion_proxy", "mocks"]
