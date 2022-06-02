@@ -32,7 +32,7 @@ fn init() -> (
     let genesis = GenesisConfig::default();
     let root = init_simulator(Some(genesis));
 
-    let fpo: ContractAccount<FPOContractContract> = deploy!(
+    let mock: ContractAccount<FPOContractContract> = deploy!(
         contract: FPOContractContract,
         contract_id: "mockedfpo".to_string(),
         bytes: &MOCKED_FPO_BYTES,
@@ -59,7 +59,7 @@ fn init() -> (
         &"mockedfpo".to_string()
     );
 
-    (root, account, request_proxy, fpo)
+    (root, account, request_proxy, mock)
 }
 
 fn alice_account() -> AccountId {
@@ -108,7 +108,7 @@ fn test_transfer_with_invalid_reference_length() {
 }
 
 #[test]
-fn test_mock_fpo_contract() {
+fn test_mocked_fpo_contract() {
     let (_root, alice, _request_proxy, fpo) = init();
 
     let price_entry = call!(
@@ -123,7 +123,7 @@ fn test_mock_fpo_contract() {
     );
 }
 
-// TODO - Broken integration test
+// TODO - This test fails but should not
 #[test]
 fn test_transfer_usd_near() {
     let initial_bob_balance = to_yocto("5000");
@@ -152,12 +152,13 @@ fn test_transfer_usd_near() {
         ),
         deposit = transfer_amount
     );
+    // TODO this call fails
     result.assert_success();
 
-    println!(
-        "test_transfer_usd_near ==> TeraGas burnt: {}",
-        result.gas_burnt() as f64 / 1e12
-    );
+    // println!(
+    //     "test_transfer_usd_near ==> TeraGas burnt: {}",
+    //     result.gas_burnt() as f64 / 1e12
+    // );
 
     // Check Alice balance
     // assert_eq_with_gas(to_yocto("1000"), alice.account().unwrap().amount);
