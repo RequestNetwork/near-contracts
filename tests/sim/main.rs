@@ -152,7 +152,6 @@ fn test_transfer_usd_near() {
         ),
         deposit = transfer_amount
     );
-    // TODO this call fails
     result.assert_success();
 
     // println!(
