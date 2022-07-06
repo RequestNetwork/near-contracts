@@ -31,10 +31,12 @@ pub struct FPOContract {}
 #[near_bindgen]
 impl FPOContract {
   /// Returns all data associated with a price pair by a provider
+  #[allow(unused_variables)]
   pub fn get_entry(&self, pair: String, provider: AccountId) -> Option<PriceEntry> {
     env::log(format!("get_entry OK").as_bytes());
     match &*pair {
       "NEAR/USD" => Some(PriceEntry {
+        // 1 USD = 123 NEAR
         price: U128::from(123000000),
         decimals: 6,
         last_update: env::block_timestamp(),

@@ -13,7 +13,7 @@ const ONE_NEAR: Balance = 1_000_000_000_000_000_000_000_000;
 // Fiat values with two decimals
 const ONE_FIAT: Balance = 100;
 const MIN_GAS: Gas = 50_000_000_000_000;
-const CALLBACK_GAS: Gas = 10_000_000_000_000;
+const BASIC_GAS: Gas = 10_000_000_000_000;
 
 /**
  * Flux oracle-related declarations
@@ -68,6 +68,7 @@ pub trait ExtSelfRequestProxy {
         fee_payment_address: ValidAccountId,
         fee_amount: U128,
         payment_reference: String,
+        payer: AccountId,
     ) -> u128;
 }
 
@@ -85,7 +86,6 @@ impl ConversionProxy {
         fee_address: ValidAccountId,
         fee_fiat_amount: U128,
     ) -> Promise {
-        println!("payable transfer_with_reference");
         assert!(
             MIN_GAS <= env::prepaid_gas(),
             "Not enough attached Gas to call this method (Supplied: {}. Demand: {})",
@@ -97,23 +97,26 @@ impl ConversionProxy {
             .expect("Payment reference value error");
         assert_eq!(reference_vec.len(), 8, "Incorrect payment reference length");
 
-        fpo_contract::get_entry(
+        let get_rate = fpo_contract::get_entry(
             "NEAR/USD".to_string(),
             self.provider_account_id.clone(),
             &self.oracle_account_id,
             NO_DEPOSIT,
-            CALLBACK_GAS,
-        )
-        .then(ext_self::rate_callback(
+            BASIC_GAS,
+        );
+        let callback_gas = BASIC_GAS * 3;
+        let process_request_payment = ext_self::rate_callback(
             to,
             fiat_amount,
             fee_address,
             fee_fiat_amount,
             payment_reference,
+            env::predecessor_account_id(),
             &env::current_account_id(),
             env::attached_deposit(),
-            CALLBACK_GAS * 3,
-        ))
+            callback_gas,
+        );
+        get_rate.then(process_request_payment)
     }
 
     #[init]
@@ -127,6 +130,7 @@ impl ConversionProxy {
     }
 
     pub fn set_oracle_account(&mut self, oracle: ValidAccountId) {
+        // TODO: can be abused by a contract
         let signer_id = env::signer_account_id();
         if self.owner_id == signer_id {
             self.oracle_account_id = oracle.to_string();
@@ -204,6 +208,7 @@ impl ConversionProxy {
         fee_payment_address: ValidAccountId,
         fee_amount: U128,
         payment_reference: String,
+        payer: ValidAccountId,
     ) -> u128 {
         near_sdk::assert_self();
         // Parse rate from oracle promise result
@@ -250,10 +255,10 @@ impl ConversionProxy {
                         fee_amount.into(),
                         U128::from(env::attached_deposit()),
                         U128::from(change),
-                        env::predecessor_account_id(),
+                        payer.to_string(),
                         &env::current_account_id(),
                         NO_DEPOSIT,
-                        CALLBACK_GAS,
+                        BASIC_GAS,
                     )),
             );
 
