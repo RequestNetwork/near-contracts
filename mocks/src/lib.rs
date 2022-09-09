@@ -51,7 +51,7 @@ mod tests {
 
   use super::*;
   use crate::AccountId;
-  use near_sdk::{testing_env, Balance, Gas, VMContext};
+  use near_sdk::{testing_env, Balance, Gas, MockedBlockchain, VMContext};
   use near_sdk_sim::to_yocto;
 
   fn get_context(
@@ -81,14 +81,26 @@ mod tests {
   }
   #[test]
   fn get_entry() {
-    let context = get_context(
-      "alice.near".to_string(),
-      to_yocto("1"),
-      10u64.pow(14),
-      false,
-    );
+    let context = get_context("alice.near".to_string(), to_yocto("1"), 10u64.pow(14), true);
     testing_env!(context);
-    let mut contract = FPOContract::default();
-    contract.get_entry("NEAR/USD".to_string(), "any".to_string());
+    let contract = FPOContract::default();
+    if let Some(result) = contract.get_entry("NEAR/USD".to_string(), "any".to_string()) {
+      assert_eq!(result.price, U128::from(123000000));
+      assert_eq!(result.decimals, 6);
+    } else {
+      panic!("NEAR/USD mock returned None")
+    }
+  }
+  #[test]
+  fn get_missing_pair_entry() {
+    let context = get_context("alice.near".to_string(), to_yocto("1"), 10u64.pow(14), true);
+    testing_env!(context);
+    let contract = FPOContract::default();
+    assert_eq!(
+      contract
+        .get_entry("NEAR/VND".to_string(), "any".to_string())
+        .is_none(),
+      true
+    );
   }
 }
