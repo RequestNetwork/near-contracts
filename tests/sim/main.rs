@@ -71,7 +71,6 @@ fn test_transfer_usd_near() {
     let initial_alice_balance = alice.account().unwrap().amount;
     let initial_bob_balance = bob.account().unwrap().amount;
     let initial_builder_balance = builder.account().unwrap().amount;
-    let initial_request_proxy_balance = request_proxy.account().unwrap().amount;
     let transfer_amount = to_yocto("100");
     let payment_address = bob.account_id().try_into().unwrap();
     let fee_address = builder.account_id().try_into().unwrap();
@@ -84,6 +83,7 @@ fn test_transfer_usd_near() {
             payment_address,
             // 12.00 USD (main)
             U128::from(1200),
+            String::from("USD"),
             fee_address,
             // 1.00 USD (fee)
             U128::from(100)
@@ -126,21 +126,6 @@ fn test_transfer_usd_near() {
         to_yocto("1") / 123,
         "Builder should receive exactly 1 USD worth of NEAR"
     );
-
-    // assert!(
-    //     initial_request_proxy_balance >= request_proxy.account().unwrap().amount,
-    //     "The contract should not keep funds"
-    // );
-
-    println!(
-        "brrrrr money printer (micro-NEAR): {}",
-        (initial_bob_balance * 2 + initial_alice_balance + initial_request_proxy_balance
-            - bob.account().unwrap().amount
-            - builder.account().unwrap().amount
-            - alice_balance
-            - request_proxy.account().unwrap().amount)
-            / 1_000_000_000_000_000_000
-    );
 }
 
 #[test]
@@ -158,6 +143,7 @@ fn test_transfer_with_invalid_reference_length() {
             "0x11223344556677".to_string(),
             payment_address,
             U128::from(12),
+            String::from("USD"),
             fee_address,
             U128::from(1)
         ),
@@ -178,6 +164,29 @@ fn test_transfer_with_invalid_reference_length() {
 }
 
 #[test]
+fn test_transfer_with_wrong_currency() {
+    let (alice, bob, builder, request_proxy) = init();
+    let transfer_amount = to_yocto("100");
+    let payment_address = bob.account_id().try_into().unwrap();
+    let fee_address = builder.account_id().try_into().unwrap();
+
+    // Token transfer failed
+    let result = call!(
+        alice,
+        request_proxy.transfer_with_reference(
+            "0x1122334455667788".to_string(),
+            payment_address,
+            U128::from(1200),
+            String::from("WRONG"),
+            fee_address,
+            U128::from(100)
+        ),
+        deposit = transfer_amount
+    );
+    assert_one_promise_error(result, "ERR_INVALID_ORACLE_RESPONSE");
+}
+
+#[test]
 fn test_transfer_zero_usd_near() {
     let (alice, bob, builder, request_proxy) = init();
     let initial_alice_balance = alice.account().unwrap().amount;
@@ -192,6 +201,7 @@ fn test_transfer_zero_usd_near() {
             "0x1122334455667788".to_string(),
             payment_address,
             U128::from(0),
+            String::from("USD"),
             fee_address,
             U128::from(0)
         ),

@@ -98,7 +98,7 @@ mod tests {
     let contract = FPOContract::default();
     assert_eq!(
       contract
-        .get_entry("NEAR/VND".to_string(), "any".to_string())
+        .get_entry("NEAR/WRONG".to_string(), "any".to_string())
         .is_none(),
       true
     );

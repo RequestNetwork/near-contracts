@@ -54,6 +54,7 @@ pub trait ExtSelfRequestProxy {
         payment_reference: String,
         payment_address: ValidAccountId,
         amount: U128,
+        currency: String,
         fee_payment_address: ValidAccountId,
         fee_amount: U128,
         deposit: U128,
@@ -65,6 +66,7 @@ pub trait ExtSelfRequestProxy {
         &self,
         payment_address: ValidAccountId,
         amount: U128,
+        currency: String,
         fee_payment_address: ValidAccountId,
         fee_amount: U128,
         payment_reference: String,
@@ -74,17 +76,16 @@ pub trait ExtSelfRequestProxy {
 
 #[near_bindgen]
 impl ConversionProxy {
-    // Transfers NEAR tokens to a payment address (to) with a payment reference, for a fiat denominated amount.
+    /** Transfers NEAR tokens to a payment address (to) with a payment reference, for an amount denominated in currency with 2 decimals. */
     #[payable]
     pub fn transfer_with_reference(
         &mut self,
         payment_reference: String,
         to: ValidAccountId,
-        fiat_amount: U128,
-        // TODO: interface should support more currencies even if not implemented
-        // fiat_currency: string,
+        amount: U128, // 2 decimals
+        currency: String,
         fee_address: ValidAccountId,
-        fee_fiat_amount: U128,
+        fee_amount: U128,
     ) -> Promise {
         assert!(
             MIN_GAS <= env::prepaid_gas(),
@@ -98,7 +99,7 @@ impl ConversionProxy {
         assert_eq!(reference_vec.len(), 8, "Incorrect payment reference length");
 
         let get_rate = fpo_contract::get_entry(
-            "NEAR/USD".to_string(),
+            "NEAR/".to_owned() + &currency,
             self.provider_account_id.clone(),
             &self.oracle_account_id,
             NO_DEPOSIT,
@@ -107,9 +108,10 @@ impl ConversionProxy {
         let callback_gas = BASIC_GAS * 3;
         let process_request_payment = ext_self::rate_callback(
             to,
-            fiat_amount,
+            amount,
+            currency,
             fee_address,
-            fee_fiat_amount,
+            fee_amount,
             payment_reference,
             env::predecessor_account_id(),
             &env::current_account_id(),
@@ -161,6 +163,7 @@ impl ConversionProxy {
         payment_reference: String,
         payment_address: ValidAccountId,
         amount: U128,
+        currency: String,
         fee_payment_address: ValidAccountId,
         fee_amount: U128,
         deposit: U128,
@@ -177,6 +180,7 @@ impl ConversionProxy {
                 &json!({
                     "payment_reference": payment_reference,
                     "amount": amount,
+                    "currency": currency,
                     "to": payment_address,
                     "fee_amount": fee_amount,
                     "fee_address": fee_payment_address,
@@ -204,6 +208,7 @@ impl ConversionProxy {
         &mut self,
         payment_address: ValidAccountId,
         amount: U128,
+        currency: String,
         fee_payment_address: ValidAccountId,
         fee_amount: U128,
         payment_reference: String,
@@ -239,7 +244,7 @@ impl ConversionProxy {
 
         let change = env::attached_deposit() - (total_payment);
 
-        // TODO Fix code and comment: Make payment
+        // Make payment, log details and give change back
         Promise::new(payment_address.clone().to_string())
             .transfer(main_payment)
             .then(
@@ -250,6 +255,7 @@ impl ConversionProxy {
                         payment_reference,
                         payment_address.clone(),
                         amount.into(),
+                        currency,
                         fee_payment_address.clone(),
                         fee_amount.into(),
                         U128::from(env::attached_deposit()),
@@ -327,8 +333,16 @@ mod tests {
         testing_env!(context);
         let mut contract = ConversionProxy::default();
         let payment_reference = "0x11223344556677".to_string();
+        let currency = "USD".to_string();
         let (to, amount, fee_address, fee_amount) = default_values();
-        contract.transfer_with_reference(payment_reference, to, amount, fee_address, fee_amount);
+        contract.transfer_with_reference(
+            payment_reference,
+            to,
+            amount,
+            currency,
+            fee_address,
+            fee_amount,
+        );
     }
 
     #[test]
@@ -338,8 +352,16 @@ mod tests {
         testing_env!(context);
         let mut contract = ConversionProxy::default();
         let payment_reference = "0x123".to_string();
+        let currency = "USD".to_string();
         let (to, amount, fee_address, fee_amount) = default_values();
-        contract.transfer_with_reference(payment_reference, to, amount, fee_address, fee_amount);
+        contract.transfer_with_reference(
+            payment_reference,
+            to,
+            amount,
+            currency,
+            fee_address,
+            fee_amount,
+        );
     }
 
     #[test]
@@ -349,8 +371,16 @@ mod tests {
         testing_env!(context);
         let mut contract = ConversionProxy::default();
         let payment_reference = "0x1122334455667788".to_string();
+        let currency = "USD".to_string();
         let (to, amount, fee_address, fee_amount) = default_values();
-        contract.transfer_with_reference(payment_reference, to, amount, fee_address, fee_amount);
+        contract.transfer_with_reference(
+            payment_reference,
+            to,
+            amount,
+            currency,
+            fee_address,
+            fee_amount,
+        );
     }
 
     #[test]
@@ -359,8 +389,16 @@ mod tests {
         testing_env!(context);
         let mut contract = ConversionProxy::default();
         let payment_reference = "0x1122334455667788".to_string();
+        let currency = "USD".to_string();
         let (to, amount, fee_address, fee_amount) = default_values();
-        contract.transfer_with_reference(payment_reference, to, amount, fee_address, fee_amount);
+        contract.transfer_with_reference(
+            payment_reference,
+            to,
+            amount,
+            currency,
+            fee_address,
+            fee_amount,
+        );
     }
 
     #[test]
