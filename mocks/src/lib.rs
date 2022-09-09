@@ -24,8 +24,7 @@ pub struct PriceEntry {
 pub struct FPOContract {}
 
 /**
- * Mocked contract for tests
- * TODO: rename mocked?
+ * Mocked FPO contract for tests
  */
 
 #[near_bindgen]

@@ -35,8 +35,10 @@ trait FPOContract {
 
 /**
  * This contract
+ * - oracle_account_id: should be a valid FPO oracle account ID
+ * - provider_account_id: should be a valid FPO provider account ID
+ * - owner_id: only the owner can edit the contract state values above (default = deployer)
  */
-// Stateless contract
 #[near_bindgen]
 #[derive(Default, BorshDeserialize, BorshSerialize)]
 pub struct ConversionProxy {
@@ -49,8 +51,7 @@ pub struct ConversionProxy {
 #[near_sdk::ext_contract(ext_self)]
 pub trait ExtSelfRequestProxy {
     fn on_transfer_with_reference(
-        // TODO mut?
-        &mut self,
+        &self,
         payment_reference: String,
         payment_address: ValidAccountId,
         amount: U128,
@@ -157,9 +158,18 @@ impl ConversionProxy {
         return self.provider_account_id.to_string();
     }
 
+    pub fn set_owner(&mut self, owner: ValidAccountId) {
+        let signer_id = env::predecessor_account_id();
+        if self.owner_id == signer_id {
+            self.owner_id = owner.to_string();
+        } else {
+            panic!("ERR_PERMISSION");
+        }
+    }
+
     #[private]
     pub fn on_transfer_with_reference(
-        &mut self,
+        &self,
         payment_reference: String,
         payment_address: ValidAccountId,
         amount: U128,
@@ -439,5 +449,25 @@ mod tests {
         testing_env!(context);
         let (to, _amount, _fee_address, _fee_amount) = default_values();
         contract.set_provider_account(to);
+    }
+
+    #[test]
+    #[should_panic(expected = r#"ERR_PERMISSION"#)]
+    fn admin_owner_no_permission() {
+        let context = get_context(alice_account(), ntoy(1), 10u64.pow(14), false);
+        testing_env!(context);
+        let mut contract = ConversionProxy::default();
+        let (to, _amount, _fee_address, _fee_amount) = default_values();
+        contract.set_owner(to);
+    }
+
+    #[test]
+    fn admin_owner() {
+        let owner = ConversionProxy::default().owner_id;
+        let mut contract = ConversionProxy::default();
+        let context = get_context(owner, ntoy(1), 10u64.pow(14), false);
+        testing_env!(context);
+        let (to, _amount, _fee_address, _fee_amount) = default_values();
+        contract.set_owner(to);
     }
 }
