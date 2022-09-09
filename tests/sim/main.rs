@@ -21,6 +21,7 @@ lazy_static_include::lazy_static_include_bytes! {
 
 mod utils;
 
+// Initialize test environment with 3 accounts (alice, bob, builder) and a conversion mock.
 fn init() -> (
     UserAccount,
     UserAccount,
@@ -62,40 +63,6 @@ fn init() -> (
     );
 
     (account, empty_account_1, empty_account_2, request_proxy)
-}
-
-#[test]
-fn test_transfer_with_invalid_reference_length() {
-    let transfer_amount = to_yocto("500");
-
-    let (alice, bob, builder, request_proxy) = init();
-    let payment_address = bob.account_id().try_into().unwrap();
-    let fee_address = builder.account_id().try_into().unwrap();
-
-    // Token transfer failed
-    let result = call!(
-        alice,
-        request_proxy.transfer_with_reference(
-            "0x11223344556677".to_string(),
-            payment_address,
-            U128::from(12),
-            fee_address,
-            U128::from(1)
-        ),
-        deposit = transfer_amount
-    );
-    // No successful outcome is expected
-    assert!(!result.is_ok());
-
-    println!(
-        "test_transfer_with_invalid_parameter_length > TeraGas burnt: {}",
-        result.gas_burnt() as f64 / 1e12
-    );
-
-    assert_one_promise_error(result, "Incorrect payment reference length");
-
-    // Check Alice balance
-    assert_eq_with_gas(to_yocto("1000"), alice.account().unwrap().amount);
 }
 
 #[test]
@@ -177,15 +144,48 @@ fn test_transfer_usd_near() {
 }
 
 #[test]
-fn test_transfer_zero_usd_near() {
-    let initial_bob_balance: u128 = 1820000000000000000000;
+fn test_transfer_with_invalid_reference_length() {
+    let transfer_amount = to_yocto("500");
+
     let (alice, bob, builder, request_proxy) = init();
-    let initial_alice_balance = alice.account().unwrap().amount;
-    let transfer_amount = to_yocto("100");
     let payment_address = bob.account_id().try_into().unwrap();
     let fee_address = builder.account_id().try_into().unwrap();
 
     // Token transfer failed
+    let result = call!(
+        alice,
+        request_proxy.transfer_with_reference(
+            "0x11223344556677".to_string(),
+            payment_address,
+            U128::from(12),
+            fee_address,
+            U128::from(1)
+        ),
+        deposit = transfer_amount
+    );
+    // No successful outcome is expected
+    assert!(!result.is_ok());
+
+    println!(
+        "test_transfer_with_invalid_parameter_length > TeraGas burnt: {}",
+        result.gas_burnt() as f64 / 1e12
+    );
+
+    assert_one_promise_error(result, "Incorrect payment reference length");
+
+    // Check Alice balance
+    assert_eq_with_gas(to_yocto("1000"), alice.account().unwrap().amount);
+}
+
+#[test]
+fn test_transfer_zero_usd_near() {
+    let (alice, bob, builder, request_proxy) = init();
+    let initial_alice_balance = alice.account().unwrap().amount;
+    let initial_bob_balance = bob.account().unwrap().amount;
+    let transfer_amount = to_yocto("100");
+    let payment_address = bob.account_id().try_into().unwrap();
+    let fee_address = builder.account_id().try_into().unwrap();
+
     let result = call!(
         alice,
         request_proxy.transfer_with_reference(
@@ -209,15 +209,10 @@ fn test_transfer_zero_usd_near() {
 
     assert!(
         bob.account().unwrap().amount == initial_bob_balance,
-        "Bob's balance should be unchanced"
+        "Bob's balance should be unchanged"
     );
     assert!(
         builder.account().unwrap().amount == initial_bob_balance,
-        "Builder's balance should be unchanced"
+        "Builder's balance should be unchanged"
     );
-}
-
-#[test]
-fn test_transfer_low_deposit() {
-    // TODO
 }

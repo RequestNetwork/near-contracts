@@ -130,8 +130,7 @@ impl ConversionProxy {
     }
 
     pub fn set_oracle_account(&mut self, oracle: ValidAccountId) {
-        // TODO: can be abused by a contract
-        let signer_id = env::signer_account_id();
+        let signer_id = env::predecessor_account_id();
         if self.owner_id == signer_id {
             self.oracle_account_id = oracle.to_string();
         } else {
@@ -144,7 +143,7 @@ impl ConversionProxy {
     }
 
     pub fn set_provider_account(&mut self, oracle: ValidAccountId) {
-        let signer_id = env::signer_account_id();
+        let signer_id = env::predecessor_account_id();
         if self.owner_id == signer_id {
             self.provider_account_id = oracle.to_string();
         } else {
@@ -362,5 +361,45 @@ mod tests {
         let payment_reference = "0x1122334455667788".to_string();
         let (to, amount, fee_address, fee_amount) = default_values();
         contract.transfer_with_reference(payment_reference, to, amount, fee_address, fee_amount);
+    }
+
+    #[test]
+    #[should_panic(expected = r#"ERR_PERMISSION"#)]
+    fn admin_oracle_no_permission() {
+        let context = get_context(alice_account(), ntoy(1), 10u64.pow(14), false);
+        testing_env!(context);
+        let mut contract = ConversionProxy::default();
+        let (to, _amount, _fee_address, _fee_amount) = default_values();
+        contract.set_oracle_account(to);
+    }
+
+    #[test]
+    fn admin_oracle() {
+        let owner = ConversionProxy::default().owner_id;
+        let mut contract = ConversionProxy::default();
+        let context = get_context(owner, ntoy(1), 10u64.pow(14), false);
+        testing_env!(context);
+        let (to, _amount, _fee_address, _fee_amount) = default_values();
+        contract.set_oracle_account(to);
+    }
+
+    #[test]
+    #[should_panic(expected = r#"ERR_PERMISSION"#)]
+    fn admin_provider_no_permission() {
+        let context = get_context(alice_account(), ntoy(1), 10u64.pow(14), false);
+        testing_env!(context);
+        let mut contract = ConversionProxy::default();
+        let (to, _amount, _fee_address, _fee_amount) = default_values();
+        contract.set_provider_account(to);
+    }
+
+    #[test]
+    fn admin_provider() {
+        let owner = ConversionProxy::default().owner_id;
+        let mut contract = ConversionProxy::default();
+        let context = get_context(owner, ntoy(1), 10u64.pow(14), false);
+        testing_env!(context);
+        let (to, _amount, _fee_address, _fee_amount) = default_values();
+        contract.set_provider_account(to);
     }
 }
