@@ -83,8 +83,8 @@ impl ConversionProxy {
         &mut self,
         payment_reference: String,
         to: ValidAccountId,
-        amount: U128, // 2 decimals
-        currency: String,
+        amount: U128,     // 2 decimals
+        currency: String, // ISO code (eg. 'USD')
         fee_address: ValidAccountId,
         fee_amount: U128,
     ) -> Promise {
