@@ -1,0 +1,16 @@
+[package]
+name = "mocks"
+version = "0.0.1"
+authors = ["Request Labs"]
+edition = "2018"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+near-sdk = "3.1.0"
+serde = "1.0.118"
+hex = "0.4"
+
+[dev-dependencies]
+near-sdk-sim = "3.2.0"
