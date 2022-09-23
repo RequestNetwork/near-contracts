@@ -1,6 +1,6 @@
 [package]
 name = "conversion_proxy"
-version = "0.0.1"
+version = "0.0.2"
 authors = ["Request Labs"]
 edition = "2018"
 

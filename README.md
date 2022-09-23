@@ -29,13 +29,15 @@ cargo test
 near login
 # follow instructions to login with the account you will use below for deployment
 
-# To deploy again, you will need to delete the account with near delete, and create it again
-
-export ACCOUNT_ID=your_near_account
-cd contracts
 cargo
 ./build.sh
+export ACCOUNT_ID=your_near_account
+
+# 1. For the first-time deployment
 ./deploy.sh
+
+# 2. For subsequent contract updates
+./patch-deploy.sh
 ```
 
 ## Calling contract

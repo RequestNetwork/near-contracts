@@ -1,7 +1,7 @@
 use crate::utils::*;
 use conversion_proxy::ConversionProxyContract;
 use mocks::FPOContractContract;
-use near_sdk::json_types::U128;
+use near_sdk::json_types::{U128, U64};
 use near_sdk_sim::init_simulator;
 use near_sdk_sim::runtime::GenesisConfig;
 use near_sdk_sim::ContractAccount;
@@ -86,7 +86,8 @@ fn test_transfer_usd_near() {
             String::from("USD"),
             fee_address,
             // 1.00 USD (fee)
-            U128::from(100)
+            U128::from(100),
+            U64::from(0)
         ),
         deposit = transfer_amount
     );
@@ -145,7 +146,8 @@ fn test_transfer_with_invalid_reference_length() {
             U128::from(12),
             String::from("USD"),
             fee_address,
-            U128::from(1)
+            U128::from(1),
+            U64::from(0)
         ),
         deposit = transfer_amount
     );
@@ -179,7 +181,8 @@ fn test_transfer_with_wrong_currency() {
             U128::from(1200),
             String::from("WRONG"),
             fee_address,
-            U128::from(100)
+            U128::from(100),
+            U64::from(0)
         ),
         deposit = transfer_amount
     );
@@ -203,7 +206,8 @@ fn test_transfer_zero_usd_near() {
             U128::from(0),
             String::from("USD"),
             fee_address,
-            U128::from(0)
+            U128::from(0),
+            U64::from(0)
         ),
         deposit = transfer_amount
     );
@@ -225,4 +229,28 @@ fn test_transfer_zero_usd_near() {
         builder.account().unwrap().amount == initial_bob_balance,
         "Builder's balance should be unchanged"
     );
+}
+
+#[test]
+fn test_outdated_rate() {
+    let (alice, bob, builder, request_proxy) = init();
+    let transfer_amount = to_yocto("100");
+    let payment_address = bob.account_id().try_into().unwrap();
+    let fee_address = builder.account_id().try_into().unwrap();
+
+    let result = call!(
+        alice,
+        request_proxy.transfer_with_reference(
+            "0x1122334455667788".to_string(),
+            payment_address,
+            U128::from(0),
+            String::from("USD"),
+            fee_address,
+            U128::from(0),
+            // The mocked rate is 10 nanoseconds old
+            U64::from(1)
+        ),
+        deposit = transfer_amount
+    );
+    assert_one_promise_error(result, "Conversion rate too old");
 }
