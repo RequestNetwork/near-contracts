@@ -30,14 +30,14 @@ near login
 # follow instructions to login with the account you will use below for deployment
 
 cargo
-./build.sh
-export ACCOUNT_ID=your_near_account
 
 # 1. For the first-time deployment
-./deploy.sh
+./deploy.sh -a ACCOUNT_ID
 
 # 2. For subsequent contract updates
-./patch-deploy.sh
+./patch-deploy.sh -a ACCOUNT_ID
+
+# For both commands, use `-p` for production deployment.
 ```
 
 ## Calling contract
