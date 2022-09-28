@@ -1,5 +1,5 @@
 use near_sdk::borsh::{self, BorshDeserialize, BorshSerialize};
-use near_sdk::json_types::{ValidAccountId, U128};
+use near_sdk::json_types::{ValidAccountId, U128, U64};
 use near_sdk::serde::{Deserialize, Serialize};
 use near_sdk::serde_json::json;
 use near_sdk::{
@@ -30,15 +30,14 @@ pub struct PriceEntry {
 // Interface of the Flux price oracle
 #[near_sdk::ext_contract(fpo_contract)]
 trait FPOContract {
-    fn get_entry(pair: String, provider: AccountId) -> Promise;
+    fn get_entry(pair: String, provider: AccountId) -> Promise<PriceEntry>;
 }
 
-/**
- * This contract
- * - oracle_account_id: should be a valid FPO oracle account ID
- * - provider_account_id: should be a valid FPO provider account ID
- * - owner_id: only the owner can edit the contract state values above (default = deployer)
- */
+///
+/// This contract
+/// - oracle_account_id: should be a valid FPO oracle account ID
+/// - provider_account_id: should be a valid FPO provider account ID
+/// - owner_id: only the owner can edit the contract state values above (default = deployer)
 #[near_bindgen]
 #[derive(Default, BorshDeserialize, BorshSerialize)]
 pub struct ConversionProxy {
@@ -58,6 +57,7 @@ pub trait ExtSelfRequestProxy {
         currency: String,
         fee_payment_address: ValidAccountId,
         fee_amount: U128,
+        max_rate_timespan: U64,
         deposit: U128,
         change: U128,
         predecessor_account_id: AccountId,
@@ -71,22 +71,35 @@ pub trait ExtSelfRequestProxy {
         fee_payment_address: ValidAccountId,
         fee_amount: U128,
         payment_reference: String,
+        max_rate_timespan: U64,
         payer: AccountId,
     ) -> u128;
 }
 
 #[near_bindgen]
 impl ConversionProxy {
-    /** Transfers NEAR tokens to a payment address (to) with a payment reference, for an amount denominated in currency with 2 decimals. */
+    /// Main external function for this contract,  transfers NEAR tokens to a payment address (to) with a payment reference, as well as a fee.
+    /// The `amount` is denominated in `currency` with 2 decimals.
+    ///
+    /// # Arguments
+    ///
+    /// - `payment_reference`: used for indexing and matching the payment with a request
+    /// - `payment_address`: `amount` in `currency` of NEAR will be paid to this address
+    /// - `amount`: in `currency` with 2 decimals (eg. 1000 is 10.00)
+    /// - `currency`: ticker, most likely fiat (eg. 'USD')
+    /// - `fee_payment_address`: `fee_amount` in `currency` of NEAR will be paid to this address
+    /// - `fee_amount`: in `currency`
+    /// - `max_rate_timespan`: in nanoseconds, the maximum validity for the oracle rate response (or 0 if none)
     #[payable]
     pub fn transfer_with_reference(
         &mut self,
         payment_reference: String,
         to: ValidAccountId,
-        amount: U128,     // 2 decimals
-        currency: String, // ISO code (eg. 'USD')
+        amount: U128,
+        currency: String,
         fee_address: ValidAccountId,
         fee_amount: U128,
+        max_rate_timespan: U64,
     ) -> Promise {
         assert!(
             MIN_GAS <= env::prepaid_gas(),
@@ -114,6 +127,7 @@ impl ConversionProxy {
             fee_address,
             fee_amount,
             payment_reference,
+            max_rate_timespan,
             env::predecessor_account_id(),
             &env::current_account_id(),
             env::attached_deposit(),
@@ -176,6 +190,7 @@ impl ConversionProxy {
         currency: String,
         fee_payment_address: ValidAccountId,
         fee_amount: U128,
+        max_rate_timespan: U64,
         deposit: U128,
         change: U128,
         predecessor_account_id: AccountId,
@@ -188,12 +203,13 @@ impl ConversionProxy {
             // Log success for indexing and payment detection
             env::log(
                 &json!({
-                    "payment_reference": payment_reference,
+                    "to": payment_address,
                     "amount": amount,
                     "currency": currency,
-                    "to": payment_address,
+                    "payment_reference": payment_reference,
                     "fee_amount": fee_amount,
                     "fee_address": fee_payment_address,
+                    "max_rate_timespan": max_rate_timespan,
                 })
                 .to_string()
                 .into_bytes(),
@@ -222,6 +238,7 @@ impl ConversionProxy {
         fee_payment_address: ValidAccountId,
         fee_amount: U128,
         payment_reference: String,
+        max_rate_timespan: U64,
         payer: ValidAccountId,
     ) -> u128 {
         near_sdk::assert_self();
@@ -236,6 +253,13 @@ impl ConversionProxy {
             }
             PromiseResult::Failed => panic!("ERR_FAILED_ORACLE_FETCH"),
         };
+        // Check rate validity
+        assert!(
+            u64::from(max_rate_timespan) == 0
+                || rate.last_update >= env::block_timestamp() - u64::from(max_rate_timespan),
+            "Conversion rate too old (Last updated: {})",
+            rate.last_update,
+        );
         let conversion_rate = u128::from(rate.price);
         let decimals = u32::from(rate.decimals);
         let main_payment =
@@ -268,6 +292,7 @@ impl ConversionProxy {
                         currency,
                         fee_payment_address.clone(),
                         fee_amount.into(),
+                        max_rate_timespan.into(),
                         U128::from(env::attached_deposit()),
                         U128::from(change),
                         payer.to_string(),
@@ -327,12 +352,13 @@ mod tests {
         near_amount * 10u128.pow(24)
     }
 
-    fn default_values() -> (ValidAccountId, U128, ValidAccountId, U128) {
+    fn default_values() -> (ValidAccountId, U128, ValidAccountId, U128, U64) {
         (
             alice_account().try_into().unwrap(),
             U128::from(12),
             bob_account().try_into().unwrap(),
             U128::from(1),
+            U64::from(0),
         )
     }
 
@@ -344,7 +370,7 @@ mod tests {
         let mut contract = ConversionProxy::default();
         let payment_reference = "0x11223344556677".to_string();
         let currency = "USD".to_string();
-        let (to, amount, fee_address, fee_amount) = default_values();
+        let (to, amount, fee_address, fee_amount, max_rate_timespan) = default_values();
         contract.transfer_with_reference(
             payment_reference,
             to,
@@ -352,6 +378,7 @@ mod tests {
             currency,
             fee_address,
             fee_amount,
+            max_rate_timespan,
         );
     }
 
@@ -363,7 +390,7 @@ mod tests {
         let mut contract = ConversionProxy::default();
         let payment_reference = "0x123".to_string();
         let currency = "USD".to_string();
-        let (to, amount, fee_address, fee_amount) = default_values();
+        let (to, amount, fee_address, fee_amount, max_rate_timespan) = default_values();
         contract.transfer_with_reference(
             payment_reference,
             to,
@@ -371,6 +398,7 @@ mod tests {
             currency,
             fee_address,
             fee_amount,
+            max_rate_timespan,
         );
     }
 
@@ -382,7 +410,7 @@ mod tests {
         let mut contract = ConversionProxy::default();
         let payment_reference = "0x1122334455667788".to_string();
         let currency = "USD".to_string();
-        let (to, amount, fee_address, fee_amount) = default_values();
+        let (to, amount, fee_address, fee_amount, max_rate_timespan) = default_values();
         contract.transfer_with_reference(
             payment_reference,
             to,
@@ -390,6 +418,7 @@ mod tests {
             currency,
             fee_address,
             fee_amount,
+            max_rate_timespan,
         );
     }
 
@@ -400,7 +429,7 @@ mod tests {
         let mut contract = ConversionProxy::default();
         let payment_reference = "0x1122334455667788".to_string();
         let currency = "USD".to_string();
-        let (to, amount, fee_address, fee_amount) = default_values();
+        let (to, amount, fee_address, fee_amount, max_rate_timespan) = default_values();
         contract.transfer_with_reference(
             payment_reference,
             to,
@@ -408,6 +437,7 @@ mod tests {
             currency,
             fee_address,
             fee_amount,
+            max_rate_timespan,
         );
     }
 
@@ -417,7 +447,7 @@ mod tests {
         let context = get_context(alice_account(), ntoy(1), 10u64.pow(14), false);
         testing_env!(context);
         let mut contract = ConversionProxy::default();
-        let (to, _amount, _fee_address, _fee_amount) = default_values();
+        let (to, _amount, _fee_address, _fee_amount, _max_rate_timespan) = default_values();
         contract.set_oracle_account(to);
     }
 
@@ -427,7 +457,7 @@ mod tests {
         let mut contract = ConversionProxy::default();
         let context = get_context(owner, ntoy(1), 10u64.pow(14), false);
         testing_env!(context);
-        let (to, _amount, _fee_address, _fee_amount) = default_values();
+        let (to, _amount, _fee_address, _fee_amount, _max_rate_timespan) = default_values();
         contract.set_oracle_account(to);
     }
 
@@ -437,7 +467,7 @@ mod tests {
         let context = get_context(alice_account(), ntoy(1), 10u64.pow(14), false);
         testing_env!(context);
         let mut contract = ConversionProxy::default();
-        let (to, _amount, _fee_address, _fee_amount) = default_values();
+        let (to, _amount, _fee_address, _fee_amount, _max_rate_timespan) = default_values();
         contract.set_provider_account(to);
     }
 
@@ -447,7 +477,7 @@ mod tests {
         let mut contract = ConversionProxy::default();
         let context = get_context(owner, ntoy(1), 10u64.pow(14), false);
         testing_env!(context);
-        let (to, _amount, _fee_address, _fee_amount) = default_values();
+        let (to, _amount, _fee_address, _fee_amount, _max_rate_timespan) = default_values();
         contract.set_provider_account(to);
     }
 
@@ -457,7 +487,7 @@ mod tests {
         let context = get_context(alice_account(), ntoy(1), 10u64.pow(14), false);
         testing_env!(context);
         let mut contract = ConversionProxy::default();
-        let (to, _amount, _fee_address, _fee_amount) = default_values();
+        let (to, _amount, _fee_address, _fee_amount, _max_rate_timespan) = default_values();
         contract.set_owner(to);
     }
 
@@ -467,7 +497,7 @@ mod tests {
         let mut contract = ConversionProxy::default();
         let context = get_context(owner, ntoy(1), 10u64.pow(14), false);
         testing_env!(context);
-        let (to, _amount, _fee_address, _fee_amount) = default_values();
+        let (to, _amount, _fee_address, _fee_amount, _max_rate_timespan) = default_values();
         contract.set_owner(to);
     }
 }

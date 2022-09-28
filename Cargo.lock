@@ -391,7 +391,7 @@ checksum = "245097e9a4535ee1e3e3931fcfcd55a796a44c643e8596ff6566d68f09b87bbc"
 
 [[package]]
 name = "conversion_proxy"
-version = "0.0.1"
+version = "0.0.2"
 dependencies = [
  "hex",
  "near-sdk",
@@ -1481,7 +1481,7 @@ dependencies = [
 
 [[package]]
 name = "mocks"
-version = "0.0.1"
+version = "0.0.2"
 dependencies = [
  "hex",
  "near-sdk",
