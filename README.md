@@ -9,18 +9,8 @@ cargo test
 
 ## Integration tests
 
-First build the mock contract.
-
 ```
-cd contracts/mocks
-./build.sh
-```
-
-Then test.
-
-```
-cd contracts
-cargo test
+./test.sh
 ```
 
 ## Deploying contract

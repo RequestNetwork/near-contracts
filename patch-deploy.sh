@@ -13,7 +13,7 @@ while getopts ":a:ph" opt; do
       echo ""
       echo "Options:"
       echo "  -p              : for prod deployment"
-      echo "  -a [account_id] : to overrirde \$ACCOUNT_ID"
+      echo "  -a [account_id] : to override \$ACCOUNT_ID"
       exit 0
       ;;
     p)

@@ -15,7 +15,7 @@ while getopts ":a:ph" opt; do
       echo ""
       echo "Options:"
       echo "  -p              : for prod deployment"
-      echo "  -a [account_id] : to overrirde \$ACCOUNT_ID"
+      echo "  -a [account_id] : to override \$ACCOUNT_ID"
       exit 0
       ;;
     p)
@@ -46,4 +46,4 @@ printf "ACCOUNT_ID=%s\n" "$ACCOUNT_ID"
 near deploy -f --wasmFile ./out/conversion_proxy.wasm \
   --accountId $ACCOUNT_ID \
   --initFunction new  \
-  --initArgs '{"oracle_account_id": "$oracle_account_id", "provider_account_id": "$provider_account_id"}'
+  --initArgs '{"oracle_account_id": "'$oracle_account_id'", "provider_account_id": "'$provider_account_id'"}'
