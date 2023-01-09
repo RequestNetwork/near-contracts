@@ -263,9 +263,10 @@ impl ConversionProxy {
         let conversion_rate = u128::from(rate.price);
         let decimals = u32::from(rate.decimals);
         let main_payment =
-            Balance::from(amount) * ONE_NEAR / (ONE_FIAT * conversion_rate / 10u128.pow(decimals));
-        let fee_payment = Balance::from(fee_amount) * ONE_NEAR
-            / (ONE_FIAT * conversion_rate / 10u128.pow(decimals));
+            Balance::from(amount) * ONE_NEAR * 10u128.pow(decimals) / conversion_rate / ONE_FIAT;
+        let fee_payment = Balance::from(fee_amount) * ONE_NEAR * 10u128.pow(decimals)
+            / conversion_rate
+            / ONE_FIAT;
 
         let total_payment = main_payment + fee_payment;
         // Check deposit

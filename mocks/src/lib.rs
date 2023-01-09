@@ -34,8 +34,8 @@ impl FPOContract {
     env::log(format!("get_entry OK").as_bytes());
     match &*pair {
       "NEAR/USD" => Some(PriceEntry {
-        // 1 USD = 123 NEAR, 10 nanoseconds ago
-        price: U128::from(123000000),
+        // 1 NEAR = 1.234 USD, 10 nanoseconds ago
+        price: U128::from(1234000),
         decimals: 6,
         last_update: env::block_timestamp() - 10,
       }),
@@ -83,7 +83,7 @@ mod tests {
     testing_env!(context);
     let contract = FPOContract::default();
     if let Some(result) = contract.get_entry("NEAR/USD".to_string(), "any".to_string()) {
-      assert_eq!(result.price, U128::from(123000000));
+      assert_eq!(result.price, U128::from(1234000));
       assert_eq!(result.decimals, 6);
     } else {
       panic!("NEAR/USD mock returned None")
