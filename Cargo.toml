@@ -14,6 +14,7 @@ hex = "0.4"
 [dev-dependencies]
 near-sdk-sim = "3.2.0"
 conversion_proxy = { path = "./conversion_proxy" }
+fungible_conversion_proxy = { path = "./fungible_conversion_proxy" }
 mocks = { path = "./mocks" }
 
 [profile.release]
@@ -26,4 +27,4 @@ panic = "abort"
 overflow-checks = true
 
 [workspace]
-members = ["conversion_proxy", "mocks"]
+members = ["conversion_proxy", "fungible_conversion_proxy", "mocks"]
