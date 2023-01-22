@@ -1,6 +1,5 @@
 use near_sdk::borsh::{self, BorshDeserialize, BorshSerialize};
-use near_sdk::json_types::Base64VecU8;
-use near_sdk::json_types::{ValidAccountId, U128, U64};
+use near_sdk::json_types::{Base64VecU8, ValidAccountId, U128, U64};
 use near_sdk::serde::{Deserialize, Serialize};
 use near_sdk::serde_json::json;
 use near_sdk::{
@@ -9,23 +8,31 @@ use near_sdk::{
 near_sdk::setup_alloc!();
 
 const NO_DEPOSIT: Balance = 0;
-const YOCTO_DEPOSIT: Balance = 1;
-// Fiat values with two decimals
-const ONE_FIAT: Balance = 100;
-const MIN_GAS: Gas = 50_000_000_000_000;
+const YOCTO_DEPOSIT: Balance = 1; // Fungible token transfers require a deposit of exactly 1 yoctoNEAR
+const ONE_FIAT: Balance = 100; // Fiat values with two decimals
+const MIN_GAS: Gas = 100_000_000_000_000;
 const BASIC_GAS: Gas = 10_000_000_000_000;
 
-// Helper struct for serializing / deserializing the `msg` argument of `ft_on_transfer`
+/// Helper struct containing arguments supplied by the caller
+///
+/// - `amount`: in `currency` with 2 decimals (eg. 1000 is 10.00)
+/// - `currency`: ticker, most likely fiat (eg. 'USD')
+/// - `token_address`: address of token used for payment
+/// - `fee_address`: `fee_amount` in `currency` of payment token will be paid to this address
+/// - `fee_amount`: in `currency`
+/// - `max_rate_timespan`: in nanoseconds, the maximum validity for the oracle rate response (or 0 if none)
+/// - `payment_reference`: used for indexing and matching the payment with a request
+/// - `to`: `amount` in `currency` of payment token will be paid to this address
 #[derive(Serialize, Deserialize)]
-struct TransferWithReferenceArgs {
-    payment_reference: String,
-    to: ValidAccountId,
+pub struct PayerSuppliedArgs {
     amount: U128,
     currency: String,
     token_address: ValidAccountId,
     fee_address: ValidAccountId,
     fee_amount: U128,
     max_rate_timespan: U64,
+    payment_reference: String,
+    to: ValidAccountId,
 }
 
 /**
@@ -48,7 +55,6 @@ pub struct FungibleTokenMetadata {
 #[near_sdk::ext_contract(fungible_token)]
 trait FungibleTokenContract {
     fn ft_transfer(receiver_id: String, amount: String, memo: Option<String>);
-
     fn ft_metadata() -> Promise<FungibleTokenMetadata>;
 }
 
@@ -88,45 +94,24 @@ pub struct FungibleConversionProxy {
 pub trait ExtSelfRequestProxy {
     fn on_transfer_with_reference(
         &self,
-        payment_reference: String,
-        to: ValidAccountId,
-        amount: U128,
-        currency: String,
-        fee_address: ValidAccountId,
-        fee_amount: U128,
+        args: PayerSuppliedArgs,
+        payer: AccountId,
+        deposit: U128,
         crypto_amount: U128,
         crypto_fee_amount: U128,
-        max_rate_timespan: U64,
-        deposit: U128,
         change: U128,
-        predecessor_account_id: AccountId,
-        token_address: ValidAccountId,
     ) -> bool;
 
     fn ft_metadata_callback(
         &self,
-        payment_reference: String,
-        to: ValidAccountId,
-        amount: U128,
-        currency: String,
-        token_address: ValidAccountId,
-        fee_address: ValidAccountId,
-        fee_amount: U128,
-        max_rate_timespan: U64,
+        args: PayerSuppliedArgs,
         payer: AccountId,
         deposit: U128,
     ) -> u128;
 
     fn rate_callback(
         &self,
-        payment_reference: String,
-        to: ValidAccountId,
-        amount: U128,
-        currency: String,
-        token_address: ValidAccountId,
-        fee_address: ValidAccountId,
-        fee_amount: U128,
-        max_rate_timespan: U64,
+        args: PayerSuppliedArgs,
         payer: AccountId,
         deposit: U128,
         payment_token_decimals: u8,
@@ -139,27 +124,16 @@ trait FungibleTokenReceiver {
 
 #[near_bindgen]
 impl FungibleTokenReceiver for FungibleConversionProxy {
-    ///
     /// This is the function that will be called by the fungible token contract's `ft_transfer_call` function.
-    ///
-    /// Eg. msg = {"payment_reference":"abc7c8bb1234fd12","to":"dummy.payee.near","amount":"1000000","currency":"USD","token_address":"a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48.factory.bridge.near","fee_address":"fee.requestfinance.near","fee_amount":"200","max_rate_timespan":"0"}
+    /// We use the `msg` field to obtain the arguments supplied by the caller specifying the intended payment.
+    /// `msg` should be a string in JSON format containing all the fields in `PayerSuppliedArgs`.
+    /// Eg. msg = {"payment_reference":"abc7c8bb1234fd12","to":"dummy.payee.near","amount":1000000,"currency":"USD","token_address":"a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48.factory.bridge.near","fee_address":"fee.requestfinance.near","fee_amount":200,"max_rate_timespan":0}
     ///
     /// For more information on the fungible token standard, see https://nomicon.io/Standards/Tokens/FungibleToken/Core
+    ///
     fn ft_on_transfer(&mut self, sender_id: AccountId, amount: U128, msg: String) -> String {
-        let args: TransferWithReferenceArgs = serde_json::from_str(&msg).unwrap();
-
-        self.transfer_with_reference(
-            args.payment_reference,
-            args.to,
-            args.amount,
-            args.currency,
-            args.token_address,
-            args.fee_address,
-            args.fee_amount,
-            args.max_rate_timespan,
-            sender_id,
-            amount,
-        );
+        let args: PayerSuppliedArgs = serde_json::from_str(&msg).unwrap();
+        self.transfer_with_reference(args, sender_id, amount);
 
         // We cannot determine the refund until the cross-contract calls for the FT metadata and oracle
         // complete, so we always intially refund 0 and handle refunds afterwards
@@ -180,27 +154,10 @@ impl FungibleConversionProxy {
     /// See https://nomicon.io/Standards/Tokens/FungibleToken/Core for more information on how NEAR handles
     /// sending fungible tokens to be used by a contract function.
     ///
-    /// # Arguments
-    ///
-    /// - `payment_reference`: used for indexing and matching the payment with a request
-    /// - `token_address`: address of token used for payment
-    /// - `to`: `amount` in `currency` of payment token will be paid to this address
-    /// - `amount`: in `currency` with 2 decimals (eg. 1000 is 10.00)
-    /// - `currency`: ticker, most likely fiat (eg. 'USD')
-    /// - `fee_address`: `fee_amount` in `currency` of payment token will be paid to this address
-    /// - `fee_amount`: in `currency`
-    /// - `max_rate_timespan`: in nanoseconds, the maximum validity for the oracle rate response (or 0 if none)
     #[payable]
     fn transfer_with_reference(
         &mut self,
-        payment_reference: String,
-        to: ValidAccountId,
-        amount: U128,
-        currency: String,
-        token_address: ValidAccountId,
-        fee_address: ValidAccountId,
-        fee_amount: U128,
-        max_rate_timespan: U64,
+        args: PayerSuppliedArgs,
         payer: AccountId,
         deposit: U128,
     ) -> Promise {
@@ -211,56 +168,46 @@ impl FungibleConversionProxy {
             MIN_GAS
         );
 
-        let reference_vec: Vec<u8> = hex::decode(payment_reference.replace("0x", ""))
+        let reference_vec: Vec<u8> = hex::decode(args.payment_reference.replace("0x", ""))
             .expect("Payment reference value error");
         assert_eq!(reference_vec.len(), 8, "Incorrect payment reference length");
 
-        let callback_gas = BASIC_GAS * 3;
-
-        // We need the token symbol and decimals for the oracle and conversion respectively
-        fungible_token::ft_metadata(&token_address, NO_DEPOSIT, BASIC_GAS).then(
+        // We need to get the token symbol and decimals for the oracle and currency conversion respectively
+        fungible_token::ft_metadata(&args.token_address, NO_DEPOSIT, BASIC_GAS).then(
             ext_self::ft_metadata_callback(
-                payment_reference,
-                to,
-                amount,
-                currency,
-                token_address,
-                fee_address,
-                fee_amount,
-                max_rate_timespan,
+                args,
                 payer,
                 deposit,
                 &env::current_account_id(),
                 env::attached_deposit(),
-                callback_gas,
+                BASIC_GAS * 8,
             ),
         )
     }
 
-    /// Convenience function for getting arguments for `transfer_with_reference` in
-    /// string format (json) so it can be included in the "msg" parameter of `ft_transfer_call`
-    /// in fungible token contracts. Constructing the msg string could also easily be done on the
-    /// frontend so is included here just for completeness and convenience.
+    /// Convenience function for constructing the `msg` argument for `ft_transfer_call` in the fungible token contract.
+    /// Constructing the `msg` string could also easily be done on the frontend so is included here just for completeness
+    /// and convenience.
     pub fn get_transfer_with_reference_args(
         &self,
-        payment_reference: String,
-        token_address: ValidAccountId,
-        to: ValidAccountId,
         amount: U128,
         currency: String,
+        token_address: ValidAccountId,
         fee_address: ValidAccountId,
         fee_amount: U128,
         max_rate_timespan: U64,
+        payment_reference: String,
+        to: ValidAccountId,
     ) -> String {
-        let args = TransferWithReferenceArgs {
-            payment_reference,
-            token_address,
-            to,
+        let args = PayerSuppliedArgs {
             amount,
             currency,
+            token_address,
             fee_address,
             fee_amount,
             max_rate_timespan,
+            payment_reference,
+            to,
         };
         serde_json::to_string(&args).unwrap()
     }
@@ -285,7 +232,7 @@ impl FungibleConversionProxy {
     }
 
     pub fn get_oracle_account(&self) -> AccountId {
-        return self.oracle_account_id.to_string();
+        self.oracle_account_id.to_string()
     }
 
     pub fn set_provider_account(&mut self, oracle: ValidAccountId) {
@@ -298,7 +245,7 @@ impl FungibleConversionProxy {
     }
 
     pub fn get_provider_account(&self) -> AccountId {
-        return self.provider_account_id.to_string();
+        self.provider_account_id.to_string()
     }
 
     pub fn set_owner(&mut self, owner: ValidAccountId) {
@@ -313,28 +260,22 @@ impl FungibleConversionProxy {
     #[private]
     pub fn on_transfer_with_reference(
         &self,
-        payment_reference: String,
-        to: ValidAccountId,
-        amount: U128,
-        currency: String,
-        fee_address: ValidAccountId,
-        fee_amount: U128,
+        args: PayerSuppliedArgs,
+        payer: AccountId,
+        deposit: U128,
         crypto_amount: U128,
         crypto_fee_amount: U128,
-        max_rate_timespan: U64,
-        deposit: U128,
         change: U128,
-        predecessor_account_id: AccountId,
-        token_address: ValidAccountId,
     ) -> bool {
         near_sdk::assert_self();
 
         if near_sdk::is_promise_success() {
+            // return extra change to payer
             fungible_token::ft_transfer(
-                predecessor_account_id,
+                payer,
                 change.0.to_string(),
                 None,
-                &token_address,
+                &args.token_address,
                 YOCTO_DEPOSIT,
                 BASIC_GAS,
             );
@@ -342,14 +283,14 @@ impl FungibleConversionProxy {
             // Log success for indexing and payment detection
             env::log(
                 &json!({
-                    "amount": amount,
-                    "currency": currency,
-                    "token_address": token_address,
-                    "fee_address": fee_address,
-                    "fee_amount": fee_amount,
-                    "max_rate_timespan": max_rate_timespan,
-                    "payment_reference": payment_reference,
-                    "to": to,
+                    "amount": args.amount,
+                    "currency": args.currency,
+                    "token_address": args.token_address,
+                    "fee_address": args.fee_address,
+                    "fee_amount": args.fee_amount,
+                    "max_rate_timespan": args.max_rate_timespan,
+                    "payment_reference": args.payment_reference,
+                    "to": args.to,
                     "crypto_amount": crypto_amount,
                     "crypto_fee_amount": crypto_fee_amount
                 })
@@ -361,15 +302,15 @@ impl FungibleConversionProxy {
             env::log(
                 format!(
                     "Failed to transfer to account {}. Returning attached deposit of {} of token {} to {}",
-                    to, deposit.0, token_address, predecessor_account_id
-                )
+                    args.to, deposit.0, args.token_address, payer)
                 .as_bytes(),
             );
+            // Return full amount to payer
             fungible_token::ft_transfer(
-                predecessor_account_id,
-                amount.0.to_string(),
+                payer,
+                args.amount.0.to_string(),
                 None,
-                &token_address,
+                &args.token_address,
                 YOCTO_DEPOSIT,
                 BASIC_GAS,
             );
@@ -381,14 +322,7 @@ impl FungibleConversionProxy {
     #[payable]
     pub fn ft_metadata_callback(
         &mut self,
-        payment_reference: String,
-        to: ValidAccountId,
-        amount: U128,
-        currency: String,
-        token_address: ValidAccountId,
-        fee_address: ValidAccountId,
-        fee_amount: U128,
-        max_rate_timespan: U64,
+        args: PayerSuppliedArgs,
         payer: AccountId,
         deposit: U128,
     ) -> Promise {
@@ -407,28 +341,20 @@ impl FungibleConversionProxy {
         };
 
         let get_rate = fpo_contract::get_entry(
-            ft_metadata.symbol + "/" + &currency,
+            ft_metadata.symbol + "/" + &args.currency,
             self.provider_account_id.clone(),
             &self.oracle_account_id,
             NO_DEPOSIT,
             BASIC_GAS,
         );
-        let callback_gas = BASIC_GAS * 3;
         let process_request_payment = ext_self::rate_callback(
-            payment_reference,
-            to,
-            amount,
-            currency,
-            token_address,
-            fee_address,
-            fee_amount,
-            max_rate_timespan,
+            args,
             payer,
             deposit,
             ft_metadata.decimals,
             &env::current_account_id(),
             env::attached_deposit(),
-            callback_gas,
+            BASIC_GAS * 6,
         );
         get_rate.then(process_request_payment)
     }
@@ -437,14 +363,7 @@ impl FungibleConversionProxy {
     #[payable]
     pub fn rate_callback(
         &mut self,
-        payment_reference: String,
-        to: ValidAccountId,
-        amount: U128,
-        currency: String,
-        token_address: ValidAccountId,
-        fee_address: ValidAccountId,
-        fee_amount: U128,
-        max_rate_timespan: U64,
+        args: PayerSuppliedArgs,
         payer: AccountId,
         deposit: U128,
         payment_token_decimals: u8,
@@ -464,68 +383,72 @@ impl FungibleConversionProxy {
         };
         // Check rate validity
         assert!(
-            u64::from(max_rate_timespan) == 0
-                || rate.last_update >= env::block_timestamp() - u64::from(max_rate_timespan),
+            u64::from(args.max_rate_timespan) == 0
+                || rate.last_update >= env::block_timestamp() - u64::from(args.max_rate_timespan),
             "Conversion rate too old (Last updated: {})",
             rate.last_update,
         );
         let conversion_rate = u128::from(rate.price);
         let decimals = u32::from(rate.decimals); // this is the conversion rate decimals, not the token decimals
-        let main_payment = Balance::from(amount)
+        let crypto_amount = Balance::from(args.amount)
             * 10u128.pow(payment_token_decimals.into())
             * 10u128.pow(decimals)
             / conversion_rate
             / ONE_FIAT;
-        let fee_payment = Balance::from(fee_amount)
+        let crypto_fee_amount = Balance::from(args.fee_amount)
             * 10u128.pow(payment_token_decimals.into())
             * 10u128.pow(decimals)
             / conversion_rate
             / ONE_FIAT;
 
-        let total_payment = main_payment + fee_payment;
+        let total_amount = crypto_amount + crypto_fee_amount;
 
-        let main_payment_args =
-            json!({ "receiver_id": to.to_string(), "amount":main_payment.to_string(), "memo": None::<String> })
+        // Check deposit
+        assert!(
+            total_amount <= deposit.0,
+            "Deposit too small for payment (Supplied: {}. Demand (incl. fees): {})",
+            deposit.0,
+            total_amount
+        );
+
+        let change = deposit.0 - total_amount;
+
+        let crypto_amount_args =
+            json!({ "receiver_id": args.to.to_string(), "amount":crypto_amount.to_string(), "memo": None::<String> })
                 .to_string()
                 .into_bytes();
 
-        let fee_payment_args =
-            json!({ "receiver_id": fee_address.to_string(), "amount":fee_payment.to_string(), "memo": None::<String> })
+        let crypto_fee_amount_args =
+            json!({ "receiver_id": args.fee_address.to_string(), "amount":crypto_fee_amount.to_string(), "memo": None::<String> })
             .to_string()
             .into_bytes();
 
-        Promise::new(token_address.to_string())
+        // Batch cross-contract calls (either both succeed or both fail)
+        Promise::new(args.token_address.to_string())
             .function_call(
                 "ft_transfer".into(),
-                main_payment_args,
+                crypto_amount_args,
                 YOCTO_DEPOSIT,
                 BASIC_GAS,
             )
             .function_call(
                 "ft_transfer".into(),
-                fee_payment_args,
+                crypto_fee_amount_args,
                 YOCTO_DEPOSIT,
                 BASIC_GAS,
             )
             .then(ext_self::on_transfer_with_reference(
-                payment_reference,
-                to,
-                amount,
-                currency,
-                fee_address,
-                fee_amount,
-                main_payment.into(),
-                fee_payment.into(),
-                max_rate_timespan,
-                deposit,
-                U128::from(deposit.0 - total_payment),
+                args,
                 payer,
-                token_address,
+                deposit,
+                U128::from(crypto_amount),
+                U128::from(crypto_fee_amount),
+                U128::from(change),
                 &env::current_account_id(),
                 NO_DEPOSIT,
-                BASIC_GAS,
+                BASIC_GAS * 2,
             ));
 
-        total_payment
+        change
     }
 }
