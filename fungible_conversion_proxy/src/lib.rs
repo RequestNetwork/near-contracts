@@ -10,7 +10,7 @@ near_sdk::setup_alloc!();
 const NO_DEPOSIT: Balance = 0;
 const YOCTO_DEPOSIT: Balance = 1; // Fungible token transfers require a deposit of exactly 1 yoctoNEAR
 const ONE_FIAT: Balance = 100; // Fiat values with two decimals
-const MIN_GAS: Gas = 100_000_000_000_000;
+const MIN_GAS: Gas = 110_000_000_000_000;
 const BASIC_GAS: Gas = 10_000_000_000_000;
 
 /// Helper struct containing arguments supplied by the caller
@@ -127,12 +127,12 @@ impl FungibleTokenReceiver for FungibleConversionProxy {
     /// This is the function that will be called by the fungible token contract's `ft_transfer_call` function.
     /// We use the `msg` field to obtain the arguments supplied by the caller specifying the intended payment.
     /// `msg` should be a string in JSON format containing all the fields in `PayerSuppliedArgs`.
-    /// Eg. msg = {"payment_reference":"abc7c8bb1234fd12","to":"dummy.payee.near","amount":1000000,"currency":"USD","token_address":"a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48.factory.bridge.near","fee_address":"fee.requestfinance.near","fee_amount":200,"max_rate_timespan":0}
+    /// Eg. msg = {"payment_reference":"abc7c8bb1234fd12","to":"dummy.payee.near","amount":"1000000","currency":"USD","token_address":"a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48.factory.bridge.near","fee_address":"fee.requestfinance.near","fee_amount":"200","max_rate_timespan":"0"}
     ///
     /// For more information on the fungible token standard, see https://nomicon.io/Standards/Tokens/FungibleToken/Core
     ///
     fn ft_on_transfer(&mut self, sender_id: AccountId, amount: U128, msg: String) -> String {
-        let args: PayerSuppliedArgs = serde_json::from_str(&msg).unwrap();
+        let args: PayerSuppliedArgs = serde_json::from_str(&msg).expect("Incorrect msg format");
         self.transfer_with_reference(args, sender_id, amount);
 
         // We cannot determine the refund until the cross-contract calls for the FT metadata and oracle
@@ -450,5 +450,238 @@ impl FungibleConversionProxy {
             ));
 
         change
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use near_sdk::{testing_env, VMContext};
+    use near_sdk::{AccountId, Balance, MockedBlockchain};
+    use std::convert::TryInto;
+
+    fn alice_account() -> AccountId {
+        "alice.near".to_string()
+    }
+
+    fn get_context(
+        predecessor_account_id: AccountId,
+        attached_deposit: Balance,
+        prepaid_gas: Gas,
+        is_view: bool,
+    ) -> VMContext {
+        VMContext {
+            current_account_id: predecessor_account_id.clone(),
+            signer_account_id: predecessor_account_id.clone(),
+            signer_account_pk: vec![0, 1, 2],
+            predecessor_account_id,
+            input: vec![],
+            block_index: 1,
+            block_timestamp: 0,
+            epoch_height: 1,
+            account_balance: 0,
+            account_locked_balance: 0,
+            storage_usage: 10u64.pow(6),
+            attached_deposit,
+            prepaid_gas,
+            random_seed: vec![0, 1, 2],
+            is_view,
+            output_data_receivers: vec![],
+        }
+    }
+
+    fn ntoy(near_amount: Balance) -> Balance {
+        near_amount * 10u128.pow(24)
+    }
+
+    /// Helper function: get default values for PayerSuppliedArgs
+    fn get_default_payer_supplied_args() -> PayerSuppliedArgs {
+        PayerSuppliedArgs {
+            amount: 1000000.into(),
+            currency: "USD".into(),
+            token_address: "a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48.factory.bridge.near"
+                .to_string()
+                .try_into()
+                .unwrap(),
+            fee_address: "fee.requestfinance.near".to_string().try_into().unwrap(),
+            fee_amount: 200.into(),
+            max_rate_timespan: 0.into(),
+            payment_reference: "abc7c8bb1234fd12".into(),
+            to: "dummy.payee.near".to_string().try_into().unwrap(),
+        }
+    }
+
+    /// Helper function: convert a PayerSuppliedArgs into the msg string to be passed into `ft_transfer_call`
+    fn get_msg_from_args(args: PayerSuppliedArgs) -> String {
+        serde_json::to_string(&args).unwrap()
+    }
+
+    #[test]
+    #[should_panic(expected = r#"Incorrect payment reference length"#)]
+    fn transfer_with_invalid_reference_length() {
+        let context = get_context(alice_account(), ntoy(100), MIN_GAS, false);
+        testing_env!(context);
+        let mut contract = FungibleConversionProxy::default();
+
+        let mut args = get_default_payer_supplied_args();
+        args.payment_reference = "0x11223344556677".to_string();
+        let msg = get_msg_from_args(args);
+
+        contract.ft_on_transfer(alice_account(), 1.into(), msg);
+    }
+
+    #[test]
+    #[should_panic(expected = r#"Payment reference value error"#)]
+    fn transfer_with_invalid_reference_value() {
+        let context = get_context(alice_account(), ntoy(100), MIN_GAS, false);
+        testing_env!(context);
+        let mut contract = FungibleConversionProxy::default();
+
+        let mut args = get_default_payer_supplied_args();
+        args.payment_reference = "0x123".to_string();
+        let msg = get_msg_from_args(args);
+
+        contract.ft_on_transfer(alice_account(), 1.into(), msg);
+    }
+
+    #[test]
+    #[should_panic(expected = r#"Not enough attached Gas to call this method"#)]
+    fn transfer_with_not_enough_gas() {
+        let context = get_context(alice_account(), ntoy(100), 10u64.pow(14), false);
+        testing_env!(context);
+        let mut contract = FungibleConversionProxy::default();
+
+        let args = get_default_payer_supplied_args();
+        let msg = get_msg_from_args(args);
+
+        contract.ft_on_transfer(alice_account(), 1.into(), msg);
+    }
+
+    #[test]
+    #[should_panic(expected = r#"Incorrect msg format"#)]
+    fn transfer_with_invalid_msg_format() {
+        let context = get_context(alice_account(), ntoy(100), MIN_GAS, false);
+        testing_env!(context);
+        let mut contract = FungibleConversionProxy::default();
+
+        let args = get_default_payer_supplied_args();
+        let msg = get_msg_from_args(args) + ".";
+
+        contract.ft_on_transfer(alice_account(), 1.into(), msg);
+    }
+
+    #[test]
+    #[should_panic(expected = r#"Incorrect msg format"#)]
+    fn transfer_with_msg_missing_fields() {
+        let context = get_context(alice_account(), ntoy(100), MIN_GAS, false);
+        testing_env!(context);
+        let mut contract = FungibleConversionProxy::default();
+
+        let args = get_default_payer_supplied_args();
+        let msg = get_msg_from_args(args).replace("\"amount\":\"1000000\",", "");
+
+        contract.ft_on_transfer(alice_account(), 1.into(), msg);
+    }
+    #[test]
+    fn transfer_with_reference() {
+        let context = get_context(alice_account(), ntoy(100), MIN_GAS, false);
+        testing_env!(context);
+        let mut contract = FungibleConversionProxy::default();
+
+        let args = get_default_payer_supplied_args();
+        let msg = get_msg_from_args(args);
+
+        contract.ft_on_transfer(alice_account(), 1.into(), msg);
+    }
+
+    #[test]
+    fn test_get_transfer_with_reference_args() {
+        let context = get_context(alice_account(), ntoy(100), MIN_GAS, true);
+        testing_env!(context);
+        let contract = FungibleConversionProxy::default();
+
+        let expected_msg = r#"{"amount":"1000000","currency":"USD","token_address":"a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48.factory.bridge.near","fee_address":"fee.requestfinance.near","fee_amount":"200","max_rate_timespan":"0","payment_reference":"abc7c8bb1234fd12","to":"dummy.payee.near"}"#;
+        let args = get_default_payer_supplied_args();
+
+        let msg = contract.get_transfer_with_reference_args(
+            args.amount,
+            args.currency,
+            args.token_address,
+            args.fee_address,
+            args.fee_amount,
+            args.max_rate_timespan,
+            args.payment_reference,
+            args.to,
+        );
+        assert_eq!(msg, expected_msg);
+    }
+
+    #[test]
+    #[should_panic(expected = r#"ERR_PERMISSION"#)]
+    fn admin_oracle_no_permission() {
+        let context = get_context(alice_account(), ntoy(1), MIN_GAS, false);
+        testing_env!(context);
+        let mut contract = FungibleConversionProxy::default();
+
+        let new_orcale: ValidAccountId = alice_account().try_into().unwrap();
+        contract.set_oracle_account(new_orcale);
+    }
+
+    #[test]
+    fn admin_oracle() {
+        let owner = FungibleConversionProxy::default().owner_id;
+        let mut contract = FungibleConversionProxy::default();
+        let context = get_context(owner, ntoy(1), MIN_GAS, false);
+        testing_env!(context);
+
+        let new_orcale: ValidAccountId = alice_account().try_into().unwrap();
+        contract.set_oracle_account(new_orcale.clone());
+        assert_eq!(contract.oracle_account_id, new_orcale.to_string());
+    }
+
+    #[test]
+    #[should_panic(expected = r#"ERR_PERMISSION"#)]
+    fn admin_provider_no_permission() {
+        let context = get_context(alice_account(), ntoy(1), MIN_GAS, false);
+        testing_env!(context);
+        let mut contract = FungibleConversionProxy::default();
+
+        let new_provider: ValidAccountId = alice_account().try_into().unwrap();
+        contract.set_provider_account(new_provider);
+    }
+
+    #[test]
+    fn admin_provider() {
+        let owner = FungibleConversionProxy::default().owner_id;
+        let mut contract = FungibleConversionProxy::default();
+        let context = get_context(owner, ntoy(1), 10u64.pow(14), false);
+        testing_env!(context);
+
+        let new_provider: ValidAccountId = alice_account().try_into().unwrap();
+        contract.set_provider_account(new_provider.clone());
+        assert_eq!(contract.provider_account_id, new_provider.to_string());
+    }
+
+    #[test]
+    #[should_panic(expected = r#"ERR_PERMISSION"#)]
+    fn admin_owner_no_permission() {
+        let context = get_context(alice_account(), ntoy(1), MIN_GAS, false);
+        testing_env!(context);
+        let mut contract = FungibleConversionProxy::default();
+
+        let new_owner: ValidAccountId = alice_account().try_into().unwrap();
+        contract.set_owner(new_owner);
+    }
+
+    #[test]
+    fn admin_owner() {
+        let owner = FungibleConversionProxy::default().owner_id;
+        let mut contract = FungibleConversionProxy::default();
+        let context = get_context(owner, ntoy(1), MIN_GAS, false);
+        testing_env!(context);
+
+        let new_owner: ValidAccountId = alice_account().try_into().unwrap();
+        contract.set_owner(new_owner.clone());
+        assert_eq!(contract.owner_id, new_owner.to_string());
     }
 }
