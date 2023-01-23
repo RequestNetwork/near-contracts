@@ -1,6 +1,6 @@
 use crate::utils::*;
 use conversion_proxy::ConversionProxyContract;
-use mocks::FPOContractContract;
+use mocks::fpo_oracle_mock::FPOContractContract;
 use near_sdk::json_types::{U128, U64};
 use near_sdk::Balance;
 use near_sdk_sim::init_simulator;
