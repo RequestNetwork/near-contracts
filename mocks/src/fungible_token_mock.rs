@@ -3,11 +3,7 @@ use near_sdk::borsh::{self, BorshDeserialize, BorshSerialize};
 use near_sdk::json_types::{Base64VecU8, U128};
 use near_sdk::serde::{Deserialize, Serialize};
 use near_sdk::{env, near_bindgen, AccountId};
-
-// For mocks: state of a fungible token
-#[near_bindgen]
-#[derive(Default, BorshDeserialize, BorshSerialize)]
-pub struct FungibleTokenContract {}
+use std::collections::HashMap;
 
 /**
  * Mocking a fungible token contract (NEP-141)
@@ -25,17 +21,53 @@ pub struct FungibleTokenMetadata {
     pub decimals: u8,
 }
 
+// For mocks: state of a fungible token
+#[near_bindgen]
+#[derive(Default, BorshDeserialize, BorshSerialize, Serialize)]
+pub struct FungibleTokenContract {
+    balances: HashMap<AccountId, U128>,
+}
+
 /**
  * Mocked fungible token contract for tests
  */
 
 #[near_bindgen]
 impl FungibleTokenContract {
+    /// Simulates a fungible token transfer. Ensures that:
+    /// - both the sender and receiver are registered with the token contract
+    /// - exactly one yoctoNEAR is attached to the call
+    /// - sender's balance is sufficient for the transfer
     #[allow(unused_variables)]
     #[payable]
-    pub fn ft_transfer(&mut self, receiver_id: AccountId, amount: U128, memo: Option<String>) {
-        env::log(format!("ft_transfer OK").as_bytes());
+    pub fn ft_transfer(&mut self, receiver_id: AccountId, amount: String, memo: Option<String>) {
         assert_one_yocto();
+        assert!(
+            self.balances.contains_key(&env::predecessor_account_id()),
+            "sender is not registered with fungible token contract"
+        );
+        assert!(
+            self.balances.contains_key(&receiver_id),
+            "receiver is not registered with fungible token contract"
+        );
+
+        let amt = amount.parse::<u128>().unwrap();
+
+        assert!(
+            self.balances[&env::predecessor_account_id()].0 >= amt,
+            "sender balance is insufficient"
+        );
+
+        let old_sender_balance = self.balance(env::predecessor_account_id());
+        let old_receiver_balance = self.balance(receiver_id.to_string());
+
+        self.set_balance(
+            env::predecessor_account_id(),
+            U128::from(old_sender_balance.0 - amt),
+        );
+        self.set_balance(receiver_id, U128::from(old_receiver_balance.0 + amt));
+
+        env::log(format!("ft_transfer OK").as_bytes());
     }
 
     pub fn ft_metadata(&self) -> Option<FungibleTokenMetadata> {
@@ -49,6 +81,35 @@ impl FungibleTokenContract {
             reference_hash: None,
             decimals: 6,
         })
+    }
+
+    /// Helper function for testing
+    pub fn set_balance(&mut self, account: AccountId, balance: U128) {
+        *self.balances.get_mut(&account).unwrap() = balance;
+    }
+
+    /// Helper function for testing
+    pub fn register_account(&mut self, account: AccountId) {
+        self.balances.insert(account, 0.into());
+    }
+
+    /// Helper function for testing
+    pub fn unregister_account(&mut self, account: AccountId) {
+        self.balances.remove(&account);
+    }
+
+    /// Helper function for testing
+    pub fn is_registered(&self, account: AccountId) -> bool {
+        self.balances.contains_key(&account)
+    }
+
+    /// Helper function for testing
+    pub fn balance(&self, account: AccountId) -> U128 {
+        assert!(
+            self.balances.contains_key(&account),
+            "account is not registered with fungible token contract"
+        );
+        self.balances[&account]
     }
 }
 
@@ -92,7 +153,36 @@ mod tests {
         testing_env!(context);
         let mut contract = FungibleTokenContract::default();
 
-        contract.ft_transfer("bob.near".to_string(), 100.into(), None);
+        contract.ft_transfer("bob.near".to_string(), "100".into(), None);
+    }
+
+    #[test]
+    #[should_panic]
+
+    fn test_ft_transfer_sender_balance_too_low() {
+        let context = get_context("alice.near".to_string(), 1, 10u64.pow(14), false);
+        testing_env!(context);
+        let mut contract = FungibleTokenContract::default();
+
+        contract.register_account("alice.near".to_string());
+        contract.register_account("bob.near".to_string());
+        contract.set_balance("alice.near".to_string(), 99.into());
+
+        contract.ft_transfer("bob.near".to_string(), "100".into(), None);
+    }
+
+    #[test]
+    #[should_panic]
+
+    fn test_ft_transfer_receiver_not_registered() {
+        let context = get_context("alice.near".to_string(), 1, 10u64.pow(14), false);
+        testing_env!(context);
+        let mut contract = FungibleTokenContract::default();
+
+        contract.register_account("alice.near".to_string());
+        contract.set_balance("alice.near".to_string(), 100.into());
+
+        contract.ft_transfer("bob.near".to_string(), "100".into(), None);
     }
 
     #[test]
@@ -101,7 +191,11 @@ mod tests {
         testing_env!(context);
         let mut contract = FungibleTokenContract::default();
 
-        contract.ft_transfer("bob.near".to_string(), 100.into(), None);
+        contract.register_account("alice.near".to_string());
+        contract.register_account("bob.near".to_string());
+        contract.set_balance("alice.near".to_string(), 100.into());
+
+        contract.ft_transfer("bob.near".to_string(), "100".into(), None);
     }
 
     #[test]

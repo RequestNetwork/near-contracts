@@ -37,6 +37,12 @@ impl FPOContract {
                 decimals: 6,
                 last_update: env::block_timestamp() - 10,
             }),
+            "USDC.e/USD" => Some(PriceEntry {
+                // 1 USDC = 0.9999 USD, 10 nanoseconds ago
+                price: U128::from(999900),
+                decimals: 6,
+                last_update: env::block_timestamp() - 10,
+            }),
             _ => None,
         }
     }

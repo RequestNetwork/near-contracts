@@ -10,7 +10,7 @@ near_sdk::setup_alloc!();
 const NO_DEPOSIT: Balance = 0;
 const YOCTO_DEPOSIT: Balance = 1; // Fungible token transfers require a deposit of exactly 1 yoctoNEAR
 const ONE_FIAT: Balance = 100; // Fiat values with two decimals
-const MIN_GAS: Gas = 110_000_000_000_000;
+const MIN_GAS: Gas = 150_000_000_000_000;
 const BASIC_GAS: Gas = 10_000_000_000_000;
 
 /// Helper struct containing arguments supplied by the caller
@@ -52,7 +52,7 @@ pub struct FungibleTokenMetadata {
 }
 
 // Interface of fungible tokens
-#[near_sdk::ext_contract(fungible_token)]
+#[near_sdk::ext_contract(ft_contract)]
 trait FungibleTokenContract {
     fn ft_transfer(receiver_id: String, amount: String, memo: Option<String>);
     fn ft_metadata() -> Promise<FungibleTokenMetadata>;
@@ -100,14 +100,14 @@ pub trait ExtSelfRequestProxy {
         crypto_amount: U128,
         crypto_fee_amount: U128,
         change: U128,
-    ) -> bool;
+    ) -> String;
 
     fn ft_metadata_callback(
         &self,
         args: PayerSuppliedArgs,
         payer: AccountId,
         deposit: U128,
-    ) -> u128;
+    ) -> Promise;
 
     fn rate_callback(
         &self,
@@ -115,11 +115,11 @@ pub trait ExtSelfRequestProxy {
         payer: AccountId,
         deposit: U128,
         payment_token_decimals: u8,
-    ) -> u128;
+    ) -> Promise;
 }
 
 trait FungibleTokenReceiver {
-    fn ft_on_transfer(&mut self, sender_id: AccountId, amount: U128, msg: String) -> String;
+    fn ft_on_transfer(&mut self, sender_id: AccountId, amount: String, msg: String) -> Promise;
 }
 
 #[near_bindgen]
@@ -131,13 +131,10 @@ impl FungibleTokenReceiver for FungibleConversionProxy {
     ///
     /// For more information on the fungible token standard, see https://nomicon.io/Standards/Tokens/FungibleToken/Core
     ///
-    fn ft_on_transfer(&mut self, sender_id: AccountId, amount: U128, msg: String) -> String {
+    #[payable]
+    fn ft_on_transfer(&mut self, sender_id: AccountId, amount: String, msg: String) -> Promise {
         let args: PayerSuppliedArgs = serde_json::from_str(&msg).expect("Incorrect msg format");
-        self.transfer_with_reference(args, sender_id, amount);
-
-        // We cannot determine the refund until the cross-contract calls for the FT metadata and oracle
-        // complete, so we always intially refund 0 and handle refunds afterwards
-        "0".into()
+        self.transfer_with_reference(args, sender_id, U128::from(amount.parse::<u128>().unwrap()))
     }
 }
 
@@ -173,14 +170,14 @@ impl FungibleConversionProxy {
         assert_eq!(reference_vec.len(), 8, "Incorrect payment reference length");
 
         // We need to get the token symbol and decimals for the oracle and currency conversion respectively
-        fungible_token::ft_metadata(&args.token_address, NO_DEPOSIT, BASIC_GAS).then(
+        ft_contract::ft_metadata(&args.token_address, NO_DEPOSIT, BASIC_GAS).then(
             ext_self::ft_metadata_callback(
                 args,
                 payer,
                 deposit,
                 &env::current_account_id(),
                 env::attached_deposit(),
-                BASIC_GAS * 8,
+                BASIC_GAS * 12,
             ),
         )
     }
@@ -266,20 +263,10 @@ impl FungibleConversionProxy {
         crypto_amount: U128,
         crypto_fee_amount: U128,
         change: U128,
-    ) -> bool {
+    ) -> String {
         near_sdk::assert_self();
 
         if near_sdk::is_promise_success() {
-            // return extra change to payer
-            fungible_token::ft_transfer(
-                payer,
-                change.0.to_string(),
-                None,
-                &args.token_address,
-                YOCTO_DEPOSIT,
-                BASIC_GAS,
-            );
-
             // Log success for indexing and payment detection
             env::log(
                 &json!({
@@ -297,7 +284,7 @@ impl FungibleConversionProxy {
                 .to_string()
                 .into_bytes(),
             );
-            true
+            change.0.to_string() // return change for `ft_resolve_transfer` on the token contract
         } else {
             env::log(
                 format!(
@@ -305,16 +292,7 @@ impl FungibleConversionProxy {
                     args.to, deposit.0, args.token_address, payer)
                 .as_bytes(),
             );
-            // Return full amount to payer
-            fungible_token::ft_transfer(
-                payer,
-                args.amount.0.to_string(),
-                None,
-                &args.token_address,
-                YOCTO_DEPOSIT,
-                BASIC_GAS,
-            );
-            false
+            deposit.0.to_string() // return full amount for `ft_resolve_transfer` on the token contract
         }
     }
 
@@ -354,7 +332,7 @@ impl FungibleConversionProxy {
             ft_metadata.decimals,
             &env::current_account_id(),
             env::attached_deposit(),
-            BASIC_GAS * 6,
+            BASIC_GAS * 8,
         );
         get_rate.then(process_request_payment)
     }
@@ -367,7 +345,7 @@ impl FungibleConversionProxy {
         payer: AccountId,
         deposit: U128,
         payment_token_decimals: u8,
-    ) -> u128 {
+    ) -> Promise {
         near_sdk::assert_self();
 
         // Parse rate from oracle promise result
@@ -404,12 +382,7 @@ impl FungibleConversionProxy {
         let total_amount = crypto_amount + crypto_fee_amount;
 
         // Check deposit
-        assert!(
-            total_amount <= deposit.0,
-            "Deposit too small for payment (Supplied: {}. Demand (incl. fees): {})",
-            deposit.0,
-            total_amount
-        );
+        assert!(total_amount <= deposit.0, "Deposit too small");
 
         let change = deposit.0 - total_amount;
 
@@ -429,13 +402,13 @@ impl FungibleConversionProxy {
                 "ft_transfer".into(),
                 crypto_amount_args,
                 YOCTO_DEPOSIT,
-                BASIC_GAS,
+                BASIC_GAS * 2,
             )
             .function_call(
                 "ft_transfer".into(),
                 crypto_fee_amount_args,
                 YOCTO_DEPOSIT,
-                BASIC_GAS,
+                BASIC_GAS * 2,
             )
             .then(ext_self::on_transfer_with_reference(
                 args,
@@ -446,10 +419,8 @@ impl FungibleConversionProxy {
                 U128::from(change),
                 &env::current_account_id(),
                 NO_DEPOSIT,
-                BASIC_GAS * 2,
-            ));
-
-        change
+                BASIC_GAS,
+            ))
     }
 }
 
@@ -527,7 +498,7 @@ mod tests {
         args.payment_reference = "0x11223344556677".to_string();
         let msg = get_msg_from_args(args);
 
-        contract.ft_on_transfer(alice_account(), 1.into(), msg);
+        contract.ft_on_transfer(alice_account(), "1".into(), msg);
     }
 
     #[test]
@@ -541,7 +512,7 @@ mod tests {
         args.payment_reference = "0x123".to_string();
         let msg = get_msg_from_args(args);
 
-        contract.ft_on_transfer(alice_account(), 1.into(), msg);
+        contract.ft_on_transfer(alice_account(), "1".into(), msg);
     }
 
     #[test]
@@ -554,7 +525,7 @@ mod tests {
         let args = get_default_payer_supplied_args();
         let msg = get_msg_from_args(args);
 
-        contract.ft_on_transfer(alice_account(), 1.into(), msg);
+        contract.ft_on_transfer(alice_account(), "1".into(), msg);
     }
 
     #[test]
@@ -567,7 +538,7 @@ mod tests {
         let args = get_default_payer_supplied_args();
         let msg = get_msg_from_args(args) + ".";
 
-        contract.ft_on_transfer(alice_account(), 1.into(), msg);
+        contract.ft_on_transfer(alice_account(), "1".into(), msg);
     }
 
     #[test]
@@ -580,7 +551,7 @@ mod tests {
         let args = get_default_payer_supplied_args();
         let msg = get_msg_from_args(args).replace("\"amount\":\"1000000\",", "");
 
-        contract.ft_on_transfer(alice_account(), 1.into(), msg);
+        contract.ft_on_transfer(alice_account(), "1".into(), msg);
     }
     #[test]
     fn transfer_with_reference() {
@@ -591,7 +562,7 @@ mod tests {
         let args = get_default_payer_supplied_args();
         let msg = get_msg_from_args(args);
 
-        contract.ft_on_transfer(alice_account(), 1.into(), msg);
+        contract.ft_on_transfer(alice_account(), "1".into(), msg);
     }
 
     #[test]
