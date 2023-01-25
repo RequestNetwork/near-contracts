@@ -15,7 +15,7 @@ use std::str;
 
 near_sdk::setup_alloc!();
 
-const CONTRACT_ID: &str = "request_proxy";
+const PROXY_ID: &str = "request_proxy";
 const FUNGIBLE_CONTRACT_ID: &str = "fungible_request_proxy";
 lazy_static_include::lazy_static_include_bytes! {
    REQUEST_PROXY_BYTES => "out/conversion_proxy.wasm"
@@ -57,7 +57,7 @@ fn init() -> (
 
     let request_proxy = deploy!(
         contract: ConversionProxyContract,
-        contract_id: CONTRACT_ID,
+        contract_id: PROXY_ID,
         bytes: &REQUEST_PROXY_BYTES,
         signer_account: root,
         deposit: to_yocto("5"),
