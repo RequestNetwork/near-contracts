@@ -1,7 +1,7 @@
 [package]
 name = "fungible_conversion_proxy"
 version = "0.0.1"
-authors = ["Request Labs"]
+authors = ["Request Network Foundation"]
 edition = "2018"
 
 [lib]
