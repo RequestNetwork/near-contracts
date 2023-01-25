@@ -151,6 +151,7 @@ impl FungibleConversionProxy {
     /// See https://nomicon.io/Standards/Tokens/FungibleToken/Core for more information on how NEAR handles
     /// sending fungible tokens to be used by a contract function.
     ///
+    #[private]
     #[payable]
     fn transfer_with_reference(
         &mut self,
