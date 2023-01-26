@@ -1,9 +1,28 @@
-# Quick Start
+# Overview
+
+Smart contracts on NEAR used by the
+[Request Network](https://github.com/RequestNetwork/requestNetwork) protocol.
+
+## Setup
+
+1. Install [Rust](https://www.rust-lang.org/tools/install)
+2. Install GCC
+   ```
+   sudo apt install build-essential
+   ```
+3. Install clang
+   ```
+   sudo apt install clang
+   ```
+4. Install `wasm32-unknown-unknown` target
+   ```
+   rustup target add wasm32-unknown-unknown
+   ```
 
 ## Unit tests
 
 ```
-cd contracts/conversion_proxy
+cd near-contracts/conversion_proxy
 cargo test
 ```
 
