@@ -22,7 +22,7 @@ jobs:
       run: ./build.sh
     - name: Run conversion proxy unit tests
       run: |
-        - cd conversion/proxy
+        - cd conversion_proxy
         - cargo test
     - name: Run integration tests
       run: ./test.sh
