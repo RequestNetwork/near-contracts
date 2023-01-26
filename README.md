@@ -19,12 +19,6 @@ Smart contracts on NEAR used by the
    rustup target add wasm32-unknown-unknown
    ```
 
-## Build
-
-```
-./build.sh
-```
-
 ## Unit tests
 
 ```
