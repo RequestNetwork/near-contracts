@@ -265,8 +265,6 @@ impl FungibleConversionProxy {
         crypto_fee_amount: U128,
         change: U128,
     ) -> String {
-        near_sdk::assert_self();
-
         if near_sdk::is_promise_success() {
             // Log success for indexing and payment detection
             env::log(
@@ -305,8 +303,6 @@ impl FungibleConversionProxy {
         payer: AccountId,
         deposit: U128,
     ) -> Promise {
-        near_sdk::assert_self();
-
         // Parse fungible token metadata from promise result
         let ft_metadata = match env::promise_result(0) {
             PromiseResult::NotReady => unreachable!(),
@@ -347,8 +343,6 @@ impl FungibleConversionProxy {
         deposit: U128,
         payment_token_decimals: u8,
     ) -> Promise {
-        near_sdk::assert_self();
-
         // Parse rate from oracle promise result
         let rate = match env::promise_result(0) {
             PromiseResult::NotReady => unreachable!(),
@@ -369,31 +363,31 @@ impl FungibleConversionProxy {
         );
         let conversion_rate = u128::from(rate.price);
         let decimals = u32::from(rate.decimals); // this is the conversion rate decimals, not the token decimals
-        let crypto_amount = Balance::from(args.amount)
+        let amount = Balance::from(args.amount)
             * 10u128.pow(payment_token_decimals.into())
             * 10u128.pow(decimals)
             / conversion_rate
             / ONE_FIAT;
-        let crypto_fee_amount = Balance::from(args.fee_amount)
+        let fee_amount = Balance::from(args.fee_amount)
             * 10u128.pow(payment_token_decimals.into())
             * 10u128.pow(decimals)
             / conversion_rate
             / ONE_FIAT;
 
-        let total_amount = crypto_amount + crypto_fee_amount;
+        let total_amount = amount + fee_amount;
 
         // Check deposit
         assert!(total_amount <= deposit.0, "Deposit too small");
 
         let change = deposit.0 - total_amount;
 
-        let crypto_amount_args =
-            json!({ "receiver_id": args.to.to_string(), "amount":crypto_amount.to_string(), "memo": None::<String> })
+        let amount_args =
+            json!({ "receiver_id": args.to.to_string(), "amount":amount.to_string(), "memo": None::<String> })
                 .to_string()
                 .into_bytes();
 
-        let crypto_fee_amount_args =
-            json!({ "receiver_id": args.fee_address.to_string(), "amount":crypto_fee_amount.to_string(), "memo": None::<String> })
+        let fee_amount_args =
+            json!({ "receiver_id": args.fee_address.to_string(), "amount":fee_amount.to_string(), "memo": None::<String> })
             .to_string()
             .into_bytes();
 
@@ -401,13 +395,13 @@ impl FungibleConversionProxy {
         Promise::new(args.token_address.to_string())
             .function_call(
                 "ft_transfer".into(),
-                crypto_amount_args,
+                amount_args,
                 YOCTO_DEPOSIT,
                 BASIC_GAS * 2,
             )
             .function_call(
                 "ft_transfer".into(),
-                crypto_fee_amount_args,
+                fee_amount_args,
                 YOCTO_DEPOSIT,
                 BASIC_GAS * 2,
             )
@@ -415,8 +409,8 @@ impl FungibleConversionProxy {
                 args,
                 payer,
                 deposit,
-                U128::from(crypto_amount),
-                U128::from(crypto_fee_amount),
+                U128::from(amount),
+                U128::from(fee_amount),
                 U128::from(change),
                 &env::current_account_id(),
                 NO_DEPOSIT,
