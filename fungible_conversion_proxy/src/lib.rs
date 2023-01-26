@@ -131,7 +131,6 @@ impl FungibleTokenReceiver for FungibleConversionProxy {
     ///
     /// For more information on the fungible token standard, see https://nomicon.io/Standards/Tokens/FungibleToken/Core
     ///
-    #[payable]
     fn ft_on_transfer(&mut self, sender_id: AccountId, amount: String, msg: String) -> Promise {
         let args: PayerSuppliedArgs = serde_json::from_str(&msg).expect("Incorrect msg format");
         self.transfer_with_reference(args, sender_id, U128::from(amount.parse::<u128>().unwrap()))
@@ -152,7 +151,6 @@ impl FungibleConversionProxy {
     /// sending fungible tokens to be used by a contract function.
     ///
     #[private]
-    #[payable]
     fn transfer_with_reference(
         &mut self,
         args: PayerSuppliedArgs,
@@ -296,7 +294,6 @@ impl FungibleConversionProxy {
     }
 
     #[private]
-    #[payable]
     pub fn ft_metadata_callback(
         &mut self,
         args: PayerSuppliedArgs,
@@ -335,7 +332,6 @@ impl FungibleConversionProxy {
     }
 
     #[private]
-    #[payable]
     pub fn rate_callback(
         &mut self,
         args: PayerSuppliedArgs,
