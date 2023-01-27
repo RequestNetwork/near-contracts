@@ -24,7 +24,7 @@ const BASIC_GAS: Gas = 10_000_000_000_000;
 /// - `payment_reference`: used for indexing and matching the payment with a request
 /// - `to`: `amount` in `currency` of payment token will be paid to this address
 #[derive(Serialize, Deserialize)]
-pub struct PayerSuppliedArgs {
+pub struct PaymentArgs {
     amount: U128,
     currency: String,
     token_address: ValidAccountId,
@@ -94,7 +94,7 @@ pub struct FungibleConversionProxy {
 pub trait ExtSelfRequestProxy {
     fn on_transfer_with_reference(
         &self,
-        args: PayerSuppliedArgs,
+        args: PaymentArgs,
         payer: AccountId,
         deposit: U128,
         crypto_amount: U128,
@@ -102,16 +102,11 @@ pub trait ExtSelfRequestProxy {
         change: U128,
     ) -> String;
 
-    fn ft_metadata_callback(
-        &self,
-        args: PayerSuppliedArgs,
-        payer: AccountId,
-        deposit: U128,
-    ) -> Promise;
+    fn ft_metadata_callback(&self, args: PaymentArgs, payer: AccountId, deposit: U128) -> Promise;
 
     fn rate_callback(
         &self,
-        args: PayerSuppliedArgs,
+        args: PaymentArgs,
         payer: AccountId,
         deposit: U128,
         payment_token_decimals: u8,
@@ -126,13 +121,13 @@ trait FungibleTokenReceiver {
 impl FungibleTokenReceiver for FungibleConversionProxy {
     /// This is the function that will be called by the fungible token contract's `ft_transfer_call` function.
     /// We use the `msg` field to obtain the arguments supplied by the caller specifying the intended payment.
-    /// `msg` should be a string in JSON format containing all the fields in `PayerSuppliedArgs`.
+    /// `msg` should be a string in JSON format containing all the fields in `PaymentArgs`.
     /// Eg. msg = {"payment_reference":"abc7c8bb1234fd12","to":"dummy.payee.near","amount":"1000000","currency":"USD","token_address":"a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48.factory.bridge.near","fee_address":"fee.requestfinance.near","fee_amount":"200","max_rate_timespan":"0"}
     ///
     /// For more information on the fungible token standard, see https://nomicon.io/Standards/Tokens/FungibleToken/Core
     ///
     fn ft_on_transfer(&mut self, sender_id: AccountId, amount: String, msg: String) -> Promise {
-        let args: PayerSuppliedArgs = serde_json::from_str(&msg).expect("Incorrect msg format");
+        let args: PaymentArgs = serde_json::from_str(&msg).expect("Incorrect msg format");
         self.transfer_with_reference(args, sender_id, U128::from(amount.parse::<u128>().unwrap()))
     }
 }
@@ -153,7 +148,7 @@ impl FungibleConversionProxy {
     #[private]
     fn transfer_with_reference(
         &mut self,
-        args: PayerSuppliedArgs,
+        args: PaymentArgs,
         payer: AccountId,
         deposit: U128,
     ) -> Promise {
@@ -195,7 +190,7 @@ impl FungibleConversionProxy {
         payment_reference: String,
         to: ValidAccountId,
     ) -> String {
-        let args = PayerSuppliedArgs {
+        let args = PaymentArgs {
             amount,
             currency,
             token_address,
@@ -256,7 +251,7 @@ impl FungibleConversionProxy {
     #[private]
     pub fn on_transfer_with_reference(
         &self,
-        args: PayerSuppliedArgs,
+        args: PaymentArgs,
         payer: AccountId,
         deposit: U128,
         crypto_amount: U128,
@@ -296,7 +291,7 @@ impl FungibleConversionProxy {
     #[private]
     pub fn ft_metadata_callback(
         &mut self,
-        args: PayerSuppliedArgs,
+        args: PaymentArgs,
         payer: AccountId,
         deposit: U128,
     ) -> Promise {
@@ -334,7 +329,7 @@ impl FungibleConversionProxy {
     #[private]
     pub fn rate_callback(
         &mut self,
-        args: PayerSuppliedArgs,
+        args: PaymentArgs,
         payer: AccountId,
         deposit: U128,
         payment_token_decimals: u8,
@@ -377,12 +372,12 @@ impl FungibleConversionProxy {
 
         let change = deposit.0 - total_amount;
 
-        let amount_args =
+        let main_transfer_args =
             json!({ "receiver_id": args.to.to_string(), "amount":amount.to_string(), "memo": None::<String> })
                 .to_string()
                 .into_bytes();
 
-        let fee_amount_args =
+        let fee_transfer_args =
             json!({ "receiver_id": args.fee_address.to_string(), "amount":fee_amount.to_string(), "memo": None::<String> })
             .to_string()
             .into_bytes();
@@ -391,13 +386,13 @@ impl FungibleConversionProxy {
         Promise::new(args.token_address.to_string())
             .function_call(
                 "ft_transfer".into(),
-                amount_args,
+                main_transfer_args,
                 YOCTO_DEPOSIT,
                 BASIC_GAS * 2,
             )
             .function_call(
                 "ft_transfer".into(),
-                fee_amount_args,
+                fee_transfer_args,
                 YOCTO_DEPOSIT,
                 BASIC_GAS * 2,
             )
@@ -456,9 +451,9 @@ mod tests {
         near_amount * 10u128.pow(24)
     }
 
-    /// Helper function: get default values for PayerSuppliedArgs
-    fn get_default_payer_supplied_args() -> PayerSuppliedArgs {
-        PayerSuppliedArgs {
+    /// Helper function: get default values for PaymentArgs
+    fn get_default_payment_args() -> PaymentArgs {
+        PaymentArgs {
             amount: 1000000.into(),
             currency: "USD".into(),
             token_address: "a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48.factory.bridge.near"
@@ -473,8 +468,8 @@ mod tests {
         }
     }
 
-    /// Helper function: convert a PayerSuppliedArgs into the msg string to be passed into `ft_transfer_call`
-    fn get_msg_from_args(args: PayerSuppliedArgs) -> String {
+    /// Helper function: convert a PaymentArgs into the msg string to be passed into `ft_transfer_call`
+    fn get_msg_from_args(args: PaymentArgs) -> String {
         serde_json::to_string(&args).unwrap()
     }
 
@@ -485,7 +480,7 @@ mod tests {
         testing_env!(context);
         let mut contract = FungibleConversionProxy::default();
 
-        let mut args = get_default_payer_supplied_args();
+        let mut args = get_default_payment_args();
         args.payment_reference = "0x11223344556677".to_string();
         let msg = get_msg_from_args(args);
 
@@ -499,7 +494,7 @@ mod tests {
         testing_env!(context);
         let mut contract = FungibleConversionProxy::default();
 
-        let mut args = get_default_payer_supplied_args();
+        let mut args = get_default_payment_args();
         args.payment_reference = "0x123".to_string();
         let msg = get_msg_from_args(args);
 
@@ -513,7 +508,7 @@ mod tests {
         testing_env!(context);
         let mut contract = FungibleConversionProxy::default();
 
-        let args = get_default_payer_supplied_args();
+        let args = get_default_payment_args();
         let msg = get_msg_from_args(args);
 
         contract.ft_on_transfer(alice_account(), "1".into(), msg);
@@ -526,7 +521,7 @@ mod tests {
         testing_env!(context);
         let mut contract = FungibleConversionProxy::default();
 
-        let args = get_default_payer_supplied_args();
+        let args = get_default_payment_args();
         let msg = get_msg_from_args(args) + ".";
 
         contract.ft_on_transfer(alice_account(), "1".into(), msg);
@@ -539,7 +534,7 @@ mod tests {
         testing_env!(context);
         let mut contract = FungibleConversionProxy::default();
 
-        let args = get_default_payer_supplied_args();
+        let args = get_default_payment_args();
         let msg = get_msg_from_args(args).replace("\"amount\":\"1000000\",", "");
 
         contract.ft_on_transfer(alice_account(), "1".into(), msg);
@@ -550,7 +545,7 @@ mod tests {
         testing_env!(context);
         let mut contract = FungibleConversionProxy::default();
 
-        let args = get_default_payer_supplied_args();
+        let args = get_default_payment_args();
         let msg = get_msg_from_args(args);
 
         contract.ft_on_transfer(alice_account(), "1".into(), msg);
@@ -563,7 +558,7 @@ mod tests {
         let contract = FungibleConversionProxy::default();
 
         let expected_msg = r#"{"amount":"1000000","currency":"USD","token_address":"a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48.factory.bridge.near","fee_address":"fee.requestfinance.near","fee_amount":"200","max_rate_timespan":"0","payment_reference":"abc7c8bb1234fd12","to":"dummy.payee.near"}"#;
-        let args = get_default_payer_supplied_args();
+        let args = get_default_payment_args();
 
         let msg = contract.get_transfer_with_reference_args(
             args.amount,
