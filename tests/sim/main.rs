@@ -403,10 +403,6 @@ fn test_transfer_usd_fungible() {
         fungible_request_proxy.get_transfer_with_reference_args(
             10000.into(), // 100 USD
             "USD".into(),
-            "mockedft" // USDC.e
-                .to_string()
-                .try_into()
-                .unwrap(),
             "builder".to_string().try_into().unwrap(),
             200.into(), // 2 USD
             0.into(),
@@ -418,7 +414,7 @@ fn test_transfer_usd_fungible() {
     let msg = get_args.unwrap_json::<String>().replace("\\", "");
 
     let result = call!(
-        alice,
+        ft_contract.user_account,
         fungible_request_proxy.ft_on_transfer(alice.account_id(), send_amt.0.to_string(), msg)
     );
     result.assert_success();
@@ -466,10 +462,6 @@ fn test_transfer_usd_fungible_not_enough() {
         fungible_request_proxy.get_transfer_with_reference_args(
             100000.into(), // 1000 USD
             "USD".into(),
-            "mockedft" // USDC.e
-                .to_string()
-                .try_into()
-                .unwrap(),
             "builder".to_string().try_into().unwrap(),
             200.into(), // 2 USD
             0.into(),
@@ -481,7 +473,7 @@ fn test_transfer_usd_fungible_not_enough() {
     let msg = get_args.unwrap_json::<String>().replace("\\", "");
 
     let result = call!(
-        alice,
+        ft_contract.user_account,
         fungible_request_proxy.ft_on_transfer(alice.account_id(), send_amt.0.to_string(), msg)
     );
     assert_one_promise_error(result, "Deposit too small")
@@ -506,10 +498,6 @@ fn test_transfer_usd_fungible_receiver_send_failed() {
         fungible_request_proxy.get_transfer_with_reference_args(
             10000.into(), // 100 USD
             "USD".into(),
-            "mockedft" // USDC.e
-                .to_string()
-                .try_into()
-                .unwrap(),
             "builder".to_string().try_into().unwrap(),
             200.into(), // 2 USD
             0.into(),
@@ -521,7 +509,7 @@ fn test_transfer_usd_fungible_receiver_send_failed() {
     let msg = get_args.unwrap_json::<String>().replace("\\", "");
 
     let result = call!(
-        alice,
+        ft_contract.user_account,
         fungible_request_proxy.ft_on_transfer(alice.account_id(), send_amt.0.to_string(), msg)
     );
     result.assert_success();
@@ -558,10 +546,6 @@ fn test_transfer_usd_fungible_fee_receiver_send_failed() {
         fungible_request_proxy.get_transfer_with_reference_args(
             10000.into(), // 100 USD
             "USD".into(),
-            "mockedft" // USDC.e
-                .to_string()
-                .try_into()
-                .unwrap(),
             "builder".to_string().try_into().unwrap(),
             200.into(), // 2 USD
             0.into(),
@@ -573,7 +557,7 @@ fn test_transfer_usd_fungible_fee_receiver_send_failed() {
     let msg = get_args.unwrap_json::<String>().replace("\\", "");
 
     let result = call!(
-        alice,
+        ft_contract.user_account,
         fungible_request_proxy.ft_on_transfer(alice.account_id(), send_amt.0.to_string(), msg)
     );
     result.assert_success();
@@ -603,10 +587,6 @@ fn test_zero_usd_fungible() {
         fungible_request_proxy.get_transfer_with_reference_args(
             0.into(), // 0 USD
             "USD".into(),
-            "mockedft" // USDC.e
-                .to_string()
-                .try_into()
-                .unwrap(),
             "builder".to_string().try_into().unwrap(),
             0.into(), // 0 USD
             0.into(),
@@ -618,7 +598,7 @@ fn test_zero_usd_fungible() {
     let msg = get_args.unwrap_json::<String>().replace("\\", "");
 
     let result = call!(
-        alice,
+        ft_contract.user_account,
         fungible_request_proxy.ft_on_transfer(alice.account_id(), send_amt.0.to_string(), msg)
     );
     result.assert_success();
@@ -654,10 +634,6 @@ fn test_outdated_rate_fungible() {
         fungible_request_proxy.get_transfer_with_reference_args(
             10000.into(), // 100 USD
             "USD".into(),
-            "mockedft" // USDC.e
-                .to_string()
-                .try_into()
-                .unwrap(),
             "builder".to_string().try_into().unwrap(),
             200.into(), // 2 USD
             1.into(),   // 1 ns
@@ -669,7 +645,7 @@ fn test_outdated_rate_fungible() {
     let msg = get_args.unwrap_json::<String>().replace("\\", "");
 
     let result = call!(
-        alice,
+        ft_contract.user_account,
         fungible_request_proxy.ft_on_transfer(alice.account_id(), send_amt.0.to_string(), msg)
     );
     assert_one_promise_error(result, "Conversion rate too old");

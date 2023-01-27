@@ -17,7 +17,6 @@ const BASIC_GAS: Gas = 10_000_000_000_000;
 ///
 /// - `amount`: in `currency` with 2 decimals (eg. 1000 is 10.00)
 /// - `currency`: ticker, most likely fiat (eg. 'USD')
-/// - `token_address`: address of token used for payment
 /// - `fee_address`: `fee_amount` in `currency` of payment token will be paid to this address
 /// - `fee_amount`: in `currency`
 /// - `max_rate_timespan`: in nanoseconds, the maximum validity for the oracle rate response (or 0 if none)
@@ -27,7 +26,6 @@ const BASIC_GAS: Gas = 10_000_000_000_000;
 pub struct PaymentArgs {
     amount: U128,
     currency: String,
-    token_address: ValidAccountId,
     fee_address: ValidAccountId,
     fee_amount: U128,
     max_rate_timespan: U64,
@@ -95,6 +93,7 @@ pub trait ExtSelfRequestProxy {
     fn on_transfer_with_reference(
         &self,
         args: PaymentArgs,
+        token_address: AccountId,
         payer: AccountId,
         deposit: U128,
         crypto_amount: U128,
@@ -102,11 +101,18 @@ pub trait ExtSelfRequestProxy {
         change: U128,
     ) -> String;
 
-    fn ft_metadata_callback(&self, args: PaymentArgs, payer: AccountId, deposit: U128) -> Promise;
+    fn ft_metadata_callback(
+        &self,
+        args: PaymentArgs,
+        token_address: AccountId,
+        payer: AccountId,
+        deposit: U128,
+    ) -> Promise;
 
     fn rate_callback(
         &self,
         args: PaymentArgs,
+        token_address: AccountId,
         payer: AccountId,
         deposit: U128,
         payment_token_decimals: u8,
@@ -122,13 +128,19 @@ impl FungibleTokenReceiver for FungibleConversionProxy {
     /// This is the function that will be called by the fungible token contract's `ft_transfer_call` function.
     /// We use the `msg` field to obtain the arguments supplied by the caller specifying the intended payment.
     /// `msg` should be a string in JSON format containing all the fields in `PaymentArgs`.
-    /// Eg. msg = {"payment_reference":"abc7c8bb1234fd12","to":"dummy.payee.near","amount":"1000000","currency":"USD","token_address":"a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48.factory.bridge.near","fee_address":"fee.requestfinance.near","fee_amount":"200","max_rate_timespan":"0"}
+    /// Eg. msg = {"payment_reference":"abc7c8bb1234fd12","to":"dummy.payee.near","amount":"1000000","currency":"USD","fee_address":"fee.requestfinance.near","fee_amount":"200","max_rate_timespan":"0"}
     ///
     /// For more information on the fungible token standard, see https://nomicon.io/Standards/Tokens/FungibleToken/Core
     ///
     fn ft_on_transfer(&mut self, sender_id: AccountId, amount: String, msg: String) -> Promise {
         let args: PaymentArgs = serde_json::from_str(&msg).expect("Incorrect msg format");
-        self.transfer_with_reference(args, sender_id, U128::from(amount.parse::<u128>().unwrap()))
+        let token_address = env::predecessor_account_id();
+        self.transfer_with_reference(
+            args,
+            token_address,
+            sender_id,
+            U128::from(amount.parse::<u128>().unwrap()),
+        )
     }
 }
 
@@ -149,6 +161,7 @@ impl FungibleConversionProxy {
     fn transfer_with_reference(
         &mut self,
         args: PaymentArgs,
+        token_address: AccountId,
         payer: AccountId,
         deposit: U128,
     ) -> Promise {
@@ -164,9 +177,10 @@ impl FungibleConversionProxy {
         assert_eq!(reference_vec.len(), 8, "Incorrect payment reference length");
 
         // We need to get the token symbol and decimals for the oracle and currency conversion respectively
-        ft_contract::ft_metadata(&args.token_address, NO_DEPOSIT, BASIC_GAS).then(
+        ft_contract::ft_metadata(&token_address, NO_DEPOSIT, BASIC_GAS).then(
             ext_self::ft_metadata_callback(
                 args,
+                token_address,
                 payer,
                 deposit,
                 &env::current_account_id(),
@@ -183,7 +197,6 @@ impl FungibleConversionProxy {
         &self,
         amount: U128,
         currency: String,
-        token_address: ValidAccountId,
         fee_address: ValidAccountId,
         fee_amount: U128,
         max_rate_timespan: U64,
@@ -193,7 +206,6 @@ impl FungibleConversionProxy {
         let args = PaymentArgs {
             amount,
             currency,
-            token_address,
             fee_address,
             fee_amount,
             max_rate_timespan,
@@ -252,6 +264,7 @@ impl FungibleConversionProxy {
     pub fn on_transfer_with_reference(
         &self,
         args: PaymentArgs,
+        token_address: AccountId,
         payer: AccountId,
         deposit: U128,
         crypto_amount: U128,
@@ -264,7 +277,7 @@ impl FungibleConversionProxy {
                 &json!({
                     "amount": args.amount,
                     "currency": args.currency,
-                    "token_address": args.token_address,
+                    "token_address": token_address,
                     "fee_address": args.fee_address,
                     "fee_amount": args.fee_amount,
                     "max_rate_timespan": args.max_rate_timespan,
@@ -281,7 +294,7 @@ impl FungibleConversionProxy {
             env::log(
                 format!(
                     "Failed to transfer to account {}. Returning attached deposit of {} of token {} to {}",
-                    args.to, deposit.0, args.token_address, payer)
+                    args.to, deposit.0, token_address, payer)
                 .as_bytes(),
             );
             deposit.0.to_string() // return full amount for `ft_resolve_transfer` on the token contract
@@ -292,6 +305,7 @@ impl FungibleConversionProxy {
     pub fn ft_metadata_callback(
         &mut self,
         args: PaymentArgs,
+        token_address: AccountId,
         payer: AccountId,
         deposit: U128,
     ) -> Promise {
@@ -316,6 +330,7 @@ impl FungibleConversionProxy {
         );
         let process_request_payment = ext_self::rate_callback(
             args,
+            token_address,
             payer,
             deposit,
             ft_metadata.decimals,
@@ -330,6 +345,7 @@ impl FungibleConversionProxy {
     pub fn rate_callback(
         &mut self,
         args: PaymentArgs,
+        token_address: AccountId,
         payer: AccountId,
         deposit: U128,
         payment_token_decimals: u8,
@@ -383,7 +399,7 @@ impl FungibleConversionProxy {
             .into_bytes();
 
         // Batch cross-contract calls (either both succeed or both fail)
-        Promise::new(args.token_address.to_string())
+        Promise::new(token_address.to_string())
             .function_call(
                 "ft_transfer".into(),
                 main_transfer_args,
@@ -398,6 +414,7 @@ impl FungibleConversionProxy {
             )
             .then(ext_self::on_transfer_with_reference(
                 args,
+                token_address,
                 payer,
                 deposit,
                 U128::from(amount),
@@ -456,10 +473,6 @@ mod tests {
         PaymentArgs {
             amount: 1000000.into(),
             currency: "USD".into(),
-            token_address: "a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48.factory.bridge.near"
-                .to_string()
-                .try_into()
-                .unwrap(),
             fee_address: "fee.requestfinance.near".to_string().try_into().unwrap(),
             fee_amount: 200.into(),
             max_rate_timespan: 0.into(),
@@ -557,13 +570,12 @@ mod tests {
         testing_env!(context);
         let contract = FungibleConversionProxy::default();
 
-        let expected_msg = r#"{"amount":"1000000","currency":"USD","token_address":"a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48.factory.bridge.near","fee_address":"fee.requestfinance.near","fee_amount":"200","max_rate_timespan":"0","payment_reference":"abc7c8bb1234fd12","to":"dummy.payee.near"}"#;
+        let expected_msg = r#"{"amount":"1000000","currency":"USD","fee_address":"fee.requestfinance.near","fee_amount":"200","max_rate_timespan":"0","payment_reference":"abc7c8bb1234fd12","to":"dummy.payee.near"}"#;
         let args = get_default_payment_args();
 
         let msg = contract.get_transfer_with_reference_args(
             args.amount,
             args.currency,
-            args.token_address,
             args.fee_address,
             args.fee_amount,
             args.max_rate_timespan,
