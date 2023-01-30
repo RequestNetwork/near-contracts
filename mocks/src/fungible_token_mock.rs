@@ -58,8 +58,8 @@ impl FungibleTokenContract {
             "sender balance is insufficient"
         );
 
-        let old_sender_balance = self.balance(env::predecessor_account_id());
-        let old_receiver_balance = self.balance(receiver_id.to_string());
+        let old_sender_balance = self.ft_balance_of(env::predecessor_account_id());
+        let old_receiver_balance = self.ft_balance_of(receiver_id.to_string());
 
         self.set_balance(
             env::predecessor_account_id(),
@@ -104,7 +104,7 @@ impl FungibleTokenContract {
     }
 
     /// Helper function for testing
-    pub fn balance(&self, account: AccountId) -> U128 {
+    pub fn ft_balance_of(&self, account: AccountId) -> U128 {
         assert!(
             self.balances.contains_key(&account),
             "account is not registered with fungible token contract"
@@ -147,7 +147,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic]
+    #[should_panic(expected = r#"Requires attached deposit of exactly 1 yoctoNEAR"#)]
     fn test_ft_transfer_no_yocto() {
         let context = get_context("alice.near".to_string(), 0, 10u64.pow(14), false);
         testing_env!(context);
@@ -157,8 +157,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic]
-
+    #[should_panic(expected = r#"sender balance is insufficient"#)]
     fn test_ft_transfer_sender_balance_too_low() {
         let context = get_context("alice.near".to_string(), 1, 10u64.pow(14), false);
         testing_env!(context);
@@ -172,8 +171,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic]
-
+    #[should_panic(expected = r#"receiver is not registered with fungible token contract"#)]
     fn test_ft_transfer_receiver_not_registered() {
         let context = get_context("alice.near".to_string(), 1, 10u64.pow(14), false);
         testing_env!(context);

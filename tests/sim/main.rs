@@ -16,7 +16,7 @@ use std::str;
 near_sdk::setup_alloc!();
 
 const PROXY_ID: &str = "request_proxy";
-const FUNGIBLE_CONTRACT_ID: &str = "fungible_request_proxy";
+const FUNGIBLE_PROXY_ID: &str = "fungible_request_proxy";
 lazy_static_include::lazy_static_include_bytes! {
    REQUEST_PROXY_BYTES => "out/conversion_proxy.wasm"
 }
@@ -108,7 +108,7 @@ fn init_fungible() -> (
 
     let fungible_request_proxy = deploy!(
         contract: FungibleConversionProxyContract,
-        contract_id: FUNGIBLE_CONTRACT_ID,
+        contract_id: FUNGIBLE_PROXY_ID,
         bytes: &FUNGIBLE_REQUEST_PROXY_BYTES,
         signer_account: root,
         deposit: to_yocto("5"),
@@ -322,7 +322,7 @@ fn test_outdated_rate() {
     assert_one_promise_error(result, "Conversion rate too old");
 }
 
-// Helper function for setting for fungible token transfer tests
+// Helper function for setting up fungible token transfer tests
 fn fungible_transfer_setup(
     alice: &UserAccount,
     bob: &UserAccount,
@@ -336,7 +336,7 @@ fn fungible_transfer_setup(
     call!(builder, ft_contract.register_account(builder.account_id()));
     call!(
         builder,
-        ft_contract.register_account(FUNGIBLE_CONTRACT_ID.into())
+        ft_contract.register_account(FUNGIBLE_PROXY_ID.into())
     );
 
     // Set initial balances
@@ -354,16 +354,16 @@ fn fungible_transfer_setup(
     );
     call!(
         builder,
-        ft_contract.set_balance(FUNGIBLE_CONTRACT_ID.into(), 0.into()) // 0 USDC.e
+        ft_contract.set_balance(FUNGIBLE_PROXY_ID.into(), 0.into()) // 0 USDC.e
     );
 
-    let alice_balance_before = call!(alice, ft_contract.balance(alice.account_id()))
+    let alice_balance_before = call!(alice, ft_contract.ft_balance_of(alice.account_id()))
         .unwrap_json::<U128>()
         .0;
-    let bob_balance_before = call!(bob, ft_contract.balance(bob.account_id()))
+    let bob_balance_before = call!(bob, ft_contract.ft_balance_of(bob.account_id()))
         .unwrap_json::<U128>()
         .0;
-    let builder_balance_before = call!(builder, ft_contract.balance(builder.account_id()))
+    let builder_balance_before = call!(builder, ft_contract.ft_balance_of(builder.account_id()))
         .unwrap_json::<U128>()
         .0;
 
@@ -371,7 +371,7 @@ fn fungible_transfer_setup(
     // The token contract will transfer the specificed tokens from the caller to our contract before calling our contract
     call!(
         alice,
-        ft_contract.set_balance(FUNGIBLE_CONTRACT_ID.into(), send_amt)
+        ft_contract.set_balance(FUNGIBLE_PROXY_ID.into(), send_amt)
     );
     call!(
         alice,
@@ -420,30 +420,40 @@ fn test_transfer_usd_fungible() {
     result.assert_success();
     let change = result.unwrap_json::<String>().parse::<u128>().unwrap();
 
-    let alice_balance_after = call!(alice, ft_contract.balance(alice.account_id()))
+    let alice_balance_after = call!(alice, ft_contract.ft_balance_of(alice.account_id()))
         .unwrap_json::<U128>()
         .0
         + change;
-    let bob_balance_after = call!(bob, ft_contract.balance(bob.account_id()))
+    let bob_balance_after = call!(bob, ft_contract.ft_balance_of(bob.account_id()))
         .unwrap_json::<U128>()
         .0;
-    let builder_balance_after = call!(builder, ft_contract.balance(builder.account_id()))
+    let builder_balance_after = call!(builder, ft_contract.ft_balance_of(builder.account_id()))
         .unwrap_json::<U128>()
         .0;
 
+    // USDC.e has 6 decimals
+    let total_usdce_amount = 102 * 1000000; // 102 USD
+    let payment_usdce_amount = 100 * 1000000; // 100 USD
+    let fee_usdce_amount = 2 * 1000000; // 2 USD
+
+    // The price of USDC.e returned by the oracle is 999900 with 6 decimals, so 1 USDC.e = 999900/1000000 USD = 0.9999 USD
+    // Here we need it the other way (USD in terms of USDC.e), so 1 USD = 1000000/999900 USDC.e = 1.00010001 USDC.e
+    let rate_numerator = 1000000;
+    let rate_denominator = 999900;
+
     assert!(alice_balance_after < alice_balance_before);
     let spent_amount = alice_balance_before - alice_balance_after;
-    let expected_spent = 102 * 1000000 * 1000000 / 999900;
+    let expected_spent = total_usdce_amount * rate_numerator / rate_denominator;
     assert!(spent_amount == expected_spent);
 
     assert!(bob_balance_after > bob_balance_before);
     let received_amount = bob_balance_after - bob_balance_before;
-    let expected_received = 100 * 1000000 * 1000000 / 999900;
+    let expected_received = payment_usdce_amount * rate_numerator / rate_denominator;
     assert!(received_amount == expected_received);
 
     assert!(builder_balance_after > builder_balance_before);
     let received_amount = builder_balance_after - builder_balance_before;
-    let expected_received = 2 * 1000000 * 1000000 / 999900;
+    let expected_received = fee_usdce_amount * rate_numerator / rate_denominator;
     assert!(received_amount == expected_received);
 }
 
@@ -515,7 +525,7 @@ fn test_transfer_usd_fungible_receiver_send_failed() {
     result.assert_success();
     let change = result.unwrap_json::<String>().parse::<u128>().unwrap();
 
-    let alice_balance_after = call!(alice, ft_contract.balance(alice.account_id()))
+    let alice_balance_after = call!(alice, ft_contract.ft_balance_of(alice.account_id()))
         .unwrap_json::<U128>()
         .0
         + change;
@@ -563,7 +573,7 @@ fn test_transfer_usd_fungible_fee_receiver_send_failed() {
     result.assert_success();
     let change = result.unwrap_json::<String>().parse::<u128>().unwrap();
 
-    let alice_balance_after = call!(alice, ft_contract.balance(alice.account_id()))
+    let alice_balance_after = call!(alice, ft_contract.ft_balance_of(alice.account_id()))
         .unwrap_json::<U128>()
         .0
         + change;
@@ -604,14 +614,14 @@ fn test_zero_usd_fungible() {
     result.assert_success();
     let change = result.unwrap_json::<String>().parse::<u128>().unwrap();
 
-    let alice_balance_after = call!(alice, ft_contract.balance(alice.account_id()))
+    let alice_balance_after = call!(alice, ft_contract.ft_balance_of(alice.account_id()))
         .unwrap_json::<U128>()
         .0
         + change;
-    let bob_balance_after = call!(bob, ft_contract.balance(bob.account_id()))
+    let bob_balance_after = call!(bob, ft_contract.ft_balance_of(bob.account_id()))
         .unwrap_json::<U128>()
         .0;
-    let builder_balance_after = call!(builder, ft_contract.balance(builder.account_id()))
+    let builder_balance_after = call!(builder, ft_contract.ft_balance_of(builder.account_id()))
         .unwrap_json::<U128>()
         .0;
 
