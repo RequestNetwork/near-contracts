@@ -21,5 +21,11 @@ jobs:
     - name: Build and run conversion proxy unit tests
       working-directory: ./conversion_proxy
       run: cargo test
+    - name: Build and run fungible conversion proxy unit tests
+      working-directory: ./fungible_conversion_proxy
+      run: cargo test
+    - name: Build and run mocks unit tests
+      working-directory: ./mocks
+      run: cargo test
     - name: Run integration tests
       run: ./test.sh

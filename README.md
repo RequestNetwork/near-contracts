@@ -24,6 +24,10 @@ Smart contracts on NEAR used by the
 ```
 cd near-contracts/conversion_proxy
 cargo test
+cd near-contracts/fungible_conversion_proxy
+cargo test
+cd near-contracts/mocks
+cargo test
 ```
 
 ## Integration tests
