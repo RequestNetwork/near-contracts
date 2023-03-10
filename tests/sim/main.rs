@@ -1,6 +1,6 @@
 use crate::utils::*;
 use conversion_proxy::ConversionProxyContract;
-use fungible_conversion_proxy::FungibleConversionProxyContract;
+use fungible_conversion_proxy::{FungibleConversionProxyContract, PaymentArgs, UnfixedPaymentArgs};
 use mocks::fpo_oracle_mock::FPOContractContract;
 use mocks::fungible_token_mock::FungibleTokenContractContract;
 use near_sdk::json_types::{U128, U64};
@@ -396,26 +396,20 @@ fn test_transfer_usd_fungible() {
     let (alice_balance_before, bob_balance_before, builder_balance_before) =
         fungible_transfer_setup(&alice, &bob, &builder, &ft_contract, send_amt);
 
-    // Constuct the `msg` argument using our contract
     // Transferring 100 USD worth of USDC.e from alice to bob, with a 2 USD fee to builder
-    let get_args = call!(
-        alice,
-        fungible_request_proxy.get_transfer_with_reference_args(
-            10000.into(), // 100 USD
-            "USD".into(),
-            "builder".to_string().try_into().unwrap(),
-            200.into(), // 2 USD
-            0.into(),
-            "abc7c8bb1234fd12".into(),
-            bob.account_id().try_into().unwrap()
-        )
-    );
-    get_args.assert_success();
-    let msg = get_args.unwrap_json::<String>().replace("\\", "");
+    let args = UnfixedPaymentArgs {
+        amount: 10000.into(),
+        currency: "USD".into(),
+        fee_address: "builder".to_string().try_into().unwrap(),
+        fee_amount: 200.into(),
+        max_rate_timespan: 0.into(),
+        payment_reference: "abc7c8bb1234fd12".into(),
+        to: bob.account_id().try_into().unwrap(),
+    };
 
     let result = call!(
         ft_contract.user_account,
-        fungible_request_proxy.ft_on_transfer(alice.account_id(), send_amt.0.to_string(), msg)
+        fungible_request_proxy.ft_on_transfer(alice.account_id(), send_amt.0.to_string(), args.into())
     );
     result.assert_success();
     let change = result.unwrap_json::<String>().parse::<u128>().unwrap();
@@ -456,6 +450,152 @@ fn test_transfer_usd_fungible() {
     let expected_received = fee_usdce_amount * rate_numerator / rate_denominator;
     assert!(received_amount == expected_received);
 }
+
+
+#[test]
+fn test_transfer_usd_fungible_ignore_fixed_rate() {
+    let (alice, bob, builder, fungible_request_proxy, ft_contract) = init_fungible();
+
+    let send_amt = U128::from(500000000); // 500 USDC.e
+    let (alice_balance_before, bob_balance_before, builder_balance_before) =
+        fungible_transfer_setup(&alice, &bob, &builder, &ft_contract, send_amt);
+
+    // Transferring 100 USD worth of USDC.e from alice to bob, with a 2 USD fee to builder
+    let args = PaymentArgs {
+        amount: 10000.into(),
+        currency: "USD".into(),
+        fee_address: "builder".to_string().try_into().unwrap(),
+        fee_amount: 200.into(),
+        max_rate_timespan: 0.into(),
+        payment_reference: "abc7c8bb1234fd12".into(),
+        to: bob.account_id().try_into().unwrap(),
+        fixed_rate: Some(1000000.into()) // Should be ignored
+    };
+
+    let result = call!(
+        ft_contract.user_account,
+        fungible_request_proxy.ft_on_transfer(alice.account_id(), send_amt.0.to_string(), args.into())
+    );
+    result.assert_success();
+    let change = result.unwrap_json::<String>().parse::<u128>().unwrap();
+
+    let alice_balance_after = call!(alice, ft_contract.ft_balance_of(alice.account_id()))
+        .unwrap_json::<U128>()
+        .0
+        + change;
+    let bob_balance_after = call!(bob, ft_contract.ft_balance_of(bob.account_id()))
+        .unwrap_json::<U128>()
+        .0;
+    let builder_balance_after = call!(builder, ft_contract.ft_balance_of(builder.account_id()))
+        .unwrap_json::<U128>()
+        .0;
+
+    // USDC.e has 6 decimals
+    let total_usdce_amount = 102 * 1000000; // 102 USD
+    let payment_usdce_amount = 100 * 1000000; // 100 USD
+    let fee_usdce_amount = 2 * 1000000; // 2 USD
+
+    // The price of USDC.e returned by the oracle is 999900 with 6 decimals, so 1 USDC.e = 999900/1000000 USD = 0.9999 USD
+    // Here we need it the other way (USD in terms of USDC.e), so 1 USD = 1000000/999900 USDC.e = 1.00010001 USDC.e
+    let rate_numerator = 1000000;
+    let rate_denominator = 999900;
+
+    assert!(alice_balance_after < alice_balance_before);
+    let spent_amount = alice_balance_before - alice_balance_after;
+    let expected_spent = total_usdce_amount * rate_numerator / rate_denominator;
+    assert!(spent_amount == expected_spent);
+
+    assert!(bob_balance_after > bob_balance_before);
+    let received_amount = bob_balance_after - bob_balance_before;
+    let expected_received = payment_usdce_amount * rate_numerator / rate_denominator;
+    assert!(received_amount == expected_received);
+
+    assert!(builder_balance_after > builder_balance_before);
+    let received_amount = builder_balance_after - builder_balance_before;
+    let expected_received = fee_usdce_amount * rate_numerator / rate_denominator;
+    assert!(received_amount == expected_received);
+}
+
+
+#[test]
+fn test_transfer_fungible_fix_rate() {
+    let (alice, bob, builder, fungible_request_proxy, ft_contract) = init_fungible();
+
+    let send_amt = U128::from(500000000); // 500 USDC.e
+    let (alice_balance_before, bob_balance_before, builder_balance_before) =
+        fungible_transfer_setup(&alice, &bob, &builder, &ft_contract, send_amt);
+
+    // Test with USDC.other token, unknown to the oracle
+    let set_symbol_result = call!(builder, ft_contract.set_symbol("USDC.other".into()));
+    set_symbol_result.assert_success();
+
+    let args = PaymentArgs {
+        amount: 10000.into(),
+        currency: "USD".into(),
+        fee_address: "builder".to_string().try_into().unwrap(),
+        fee_amount: 0.into(),
+        max_rate_timespan: 0.into(),
+        payment_reference: "abc7c8bb1234fd12".into(),
+        to: bob.account_id().try_into().unwrap(),
+        fixed_rate: Some(1000000.into())
+    };
+
+    let result = call!(
+        ft_contract.user_account,
+        fungible_request_proxy.ft_on_transfer(alice.account_id(), send_amt.0.to_string(), args.into())
+    );
+    result.assert_success();
+    
+    // Need to mock the fact that fungible tokens would give the change back
+    let change = result.unwrap_json::<String>().parse::<u128>().unwrap();
+
+    // USDC.e has 6 decimals
+    let total_usdcother_amount = 100 * 1000000; // 100 USD
+    let payment_usdcother_amount = 100 * 1000000; // 100 USD
+
+    let expected_spent_amount = total_usdcother_amount; // * rate_numerator / rate_denominator;
+    let expected_received_amount = payment_usdcother_amount; // * rate_numerator / rate_denominator;
+    assert_spent(alice, alice_balance_before, expected_spent_amount + change, &ft_contract); 
+    assert_received(bob, bob_balance_before, expected_received_amount, &ft_contract);
+    assert_received(builder, builder_balance_before, 0, &ft_contract);
+}
+
+
+#[test]
+fn test_transfer_fungible_failing_oracle() {
+    let (alice, bob, builder, fungible_request_proxy, ft_contract) = init_fungible();
+
+    let send_amt = U128::from(500000000); // 500 USDC.e
+    let (alice_balance_before, bob_balance_before, builder_balance_before) =
+        fungible_transfer_setup(&alice, &bob, &builder, &ft_contract, send_amt);
+
+    // Test with USDC.other token, unknown to the oracle
+    let set_symbol_result = call!(builder, ft_contract.set_symbol("FAIL".into()));
+    set_symbol_result.assert_success();
+
+    let args = PaymentArgs {
+        amount: 10000.into(),
+        currency: "USD".into(),
+        fee_address: "builder".to_string().try_into().unwrap(),
+        fee_amount: 0.into(),
+        max_rate_timespan: 0.into(),
+        payment_reference: "abc7c8bb1234fd12".into(),
+        to: bob.account_id().try_into().unwrap(),
+        fixed_rate: Some(1000000.into())
+    };
+
+    let result = call!(
+        ft_contract.user_account,
+        fungible_request_proxy.ft_on_transfer(alice.account_id(), send_amt.0.to_string(), args.into())
+    );
+    
+    assert_last_promise_error(result, "ERR_FAILED_ORACLE_FETCH");
+
+    assert_unchanged_balance(alice, alice_balance_before, &ft_contract, "Alice");
+    assert_unchanged_balance(bob, bob_balance_before, &ft_contract, "Bob");
+    assert_unchanged_balance(builder, builder_balance_before, &ft_contract, "Builder");
+}
+
 
 #[test]
 fn test_transfer_usd_fungible_not_enough() {
@@ -609,25 +749,14 @@ fn test_zero_usd_fungible() {
 
     let result = call!(
         ft_contract.user_account,
-        fungible_request_proxy.ft_on_transfer(alice.account_id(), send_amt.0.to_string(), msg)
+        fungible_request_proxy.ft_on_transfer(alice.account_id(), send_amt.0.to_string(), msg),
+        gas = 1_500_000_000_000_000
     );
     result.assert_success();
-    let change = result.unwrap_json::<String>().parse::<u128>().unwrap();
 
-    let alice_balance_after = call!(alice, ft_contract.ft_balance_of(alice.account_id()))
-        .unwrap_json::<U128>()
-        .0
-        + change;
-    let bob_balance_after = call!(bob, ft_contract.ft_balance_of(bob.account_id()))
-        .unwrap_json::<U128>()
-        .0;
-    let builder_balance_after = call!(builder, ft_contract.ft_balance_of(builder.account_id()))
-        .unwrap_json::<U128>()
-        .0;
-
-    assert!(alice_balance_after == alice_balance_before);
-    assert!(bob_balance_after == bob_balance_before);
-    assert!(builder_balance_after == builder_balance_before);
+    assert_unchanged_balance(alice, alice_balance_before, &ft_contract, "Alice");
+    assert_unchanged_balance(bob, bob_balance_before, &ft_contract, "Bob");
+    assert_unchanged_balance(builder, builder_balance_before, &ft_contract, "Builder");
 }
 
 #[test]

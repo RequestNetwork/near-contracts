@@ -22,15 +22,28 @@ const BASIC_GAS: Gas = 10_000_000_000_000;
 /// - `max_rate_timespan`: in nanoseconds, the maximum validity for the oracle rate response (or 0 if none)
 /// - `payment_reference`: used for indexing and matching the payment with a request
 /// - `to`: `amount` in `currency` of payment token will be paid to this address
+/// - `fixed_rate`: TODO document 6 decimals
 #[derive(Serialize, Deserialize)]
 pub struct PaymentArgs {
-    amount: U128,
-    currency: String,
-    fee_address: ValidAccountId,
-    fee_amount: U128,
-    max_rate_timespan: U64,
-    payment_reference: String,
-    to: ValidAccountId,
+    pub amount: U128,
+    pub currency: String,
+    pub fee_address: ValidAccountId,
+    pub fee_amount: U128,
+    pub max_rate_timespan: U64,
+    pub payment_reference: String,
+    pub to: ValidAccountId,
+    pub fixed_rate: Option<U128>,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct UnfixedPaymentArgs {
+    pub amount: U128,
+    pub currency: String,
+    pub fee_address: ValidAccountId,
+    pub fee_amount: U128,
+    pub max_rate_timespan: U64,
+    pub payment_reference: String,
+    pub to: ValidAccountId,
 }
 
 /**
@@ -39,14 +52,14 @@ pub struct PaymentArgs {
 
 // Return type the fungible token metadata
 #[derive(BorshDeserialize, BorshSerialize, Serialize, Deserialize)]
-pub struct FungibleTokenMetadata {
-    pub spec: String,
-    pub name: String,
-    pub symbol: String,
-    pub icon: Option<String>,
-    pub reference: Option<String>,
-    pub reference_hash: Option<Base64VecU8>,
-    pub decimals: u8,
+struct FungibleTokenMetadata {
+    spec: String,
+    name: String,
+    symbol: String,
+    icon: Option<String>,
+    reference: Option<String>,
+    reference_hash: Option<Base64VecU8>,
+    decimals: u8,
 }
 
 // Interface of fungible tokens
@@ -85,6 +98,55 @@ pub struct FungibleConversionProxy {
     pub oracle_account_id: AccountId,
     pub provider_account_id: AccountId,
     pub owner_id: AccountId,
+}
+
+impl Into<PriceEntry> for Option<U128> {
+    fn into(self) -> PriceEntry {
+        if let Some(inner) = self {
+            PriceEntry {price: inner.to_owned(), decimals: 6, last_update: 0}
+        } else {
+            //TODO other error
+            panic!("ERR_FAILED_ORACLE_FETCH")
+        }
+    }
+}
+
+impl Into<UnfixedPaymentArgs> for String {
+    fn into(self) -> UnfixedPaymentArgs {
+        serde_json::from_str(&self).expect("Incorrect msg format")
+    }
+}
+
+impl Into<PaymentArgs> for UnfixedPaymentArgs {
+    fn into(self) -> PaymentArgs {
+        PaymentArgs { amount:self.amount, currency: self.currency, fee_address: self.fee_address, fee_amount: self.fee_amount, max_rate_timespan: self.max_rate_timespan, payment_reference: self.payment_reference, to: self.to, fixed_rate: None }
+    }
+}
+
+impl Into<PaymentArgs> for String {
+    fn into(self) -> PaymentArgs {
+        
+        match serde_json::from_str::<PaymentArgs>(&self) {
+            Ok(value) => value,
+            Err(_e) => {
+                self.into()
+                // let unfixedArg: UnfixedPaymentArgs = &self.into::<PaymentArgs();
+            }
+        }
+        // serde_json::from_str(&self).expect("Incorrect msg format")
+    }
+}
+
+impl Into<String> for PaymentArgs {
+    fn into(self) -> String {
+        serde_json::to_string(&self).unwrap()
+    }
+}
+
+impl Into<String> for UnfixedPaymentArgs {
+    fn into(self) -> String {
+        serde_json::to_string(&self).unwrap()
+    }
 }
 
 // Callback methods
@@ -133,10 +195,9 @@ impl FungibleTokenReceiver for FungibleConversionProxy {
     /// For more information on the fungible token standard, see https://nomicon.io/Standards/Tokens/FungibleToken/Core
     ///
     fn ft_on_transfer(&mut self, sender_id: AccountId, amount: String, msg: String) -> Promise {
-        let args: PaymentArgs = serde_json::from_str(&msg).expect("Incorrect msg format");
         let token_address = env::predecessor_account_id();
         self.transfer_with_reference(
-            args,
+            msg.into(),
             token_address,
             sender_id,
             U128::from(amount.parse::<u128>().unwrap()),
@@ -211,8 +272,37 @@ impl FungibleConversionProxy {
             max_rate_timespan,
             payment_reference,
             to,
+            fixed_rate: None
         };
-        serde_json::to_string(&args).unwrap()
+        args.into()
+    }
+
+    
+    /// Convenience function for constructing the `msg` argument for `ft_transfer_call` in the fungible token contract.
+    /// Constructing the `msg` string could also easily be done on the frontend so is included here just for completeness
+    /// and convenience.
+    /// TODO delete because the into() is easy enough
+    pub fn get_fixed_transfer_with_reference_args(
+        &self,
+        amount: U128,
+        currency: String,
+        fee_address: ValidAccountId,
+        fee_amount: U128,
+        max_rate_timespan: U64,
+        payment_reference: String,
+        to: ValidAccountId,
+        fixed_rate: U128
+    ) -> String {
+        PaymentArgs {
+            amount,
+            currency,
+            fee_address,
+            fee_amount,
+            max_rate_timespan,
+            payment_reference,
+            to,
+            fixed_rate: Some(fixed_rate)
+        }.into()
     }
 
     #[init]
@@ -355,8 +445,10 @@ impl FungibleConversionProxy {
             PromiseResult::NotReady => unreachable!(),
             PromiseResult::Successful(value) => {
                 match serde_json::from_slice::<PriceEntry>(&value) {
+                    // Conversion worked and gave a price entry back
                     Ok(value) => value,
-                    Err(_e) => panic!("ERR_INVALID_ORACLE_RESPONSE"),
+                    // Conversion failed and we use the fixed_rate as a price entry
+                    Err(_e) => args.fixed_rate.into()
                 }
             }
             PromiseResult::Failed => panic!("ERR_FAILED_ORACLE_FETCH"),
@@ -478,6 +570,7 @@ mod tests {
             max_rate_timespan: 0.into(),
             payment_reference: "abc7c8bb1234fd12".into(),
             to: "dummy.payee.near".to_string().try_into().unwrap(),
+            fixed_rate: None
         }
     }
 
@@ -568,20 +661,11 @@ mod tests {
     fn test_get_transfer_with_reference_args() {
         let context = get_context(alice_account(), ntoy(100), MIN_GAS, true);
         testing_env!(context);
-        let contract = FungibleConversionProxy::default();
 
-        let expected_msg = r#"{"amount":"1000000","currency":"USD","fee_address":"fee.requestfinance.near","fee_amount":"200","max_rate_timespan":"0","payment_reference":"abc7c8bb1234fd12","to":"dummy.payee.near"}"#;
+        let expected_msg = r#"{"amount":"1000000","currency":"USD","fee_address":"fee.requestfinance.near","fee_amount":"200","max_rate_timespan":"0","payment_reference":"abc7c8bb1234fd12","to":"dummy.payee.near","fixed_rate":null}"#;
         let args = get_default_payment_args();
 
-        let msg = contract.get_transfer_with_reference_args(
-            args.amount,
-            args.currency,
-            args.fee_address,
-            args.fee_amount,
-            args.max_rate_timespan,
-            args.payment_reference,
-            args.to,
-        );
+        let msg: String = args.into();
         assert_eq!(msg, expected_msg);
     }
 

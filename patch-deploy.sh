@@ -39,5 +39,6 @@ printf "ACCOUNT_ID=%s\n" "$ACCOUNT_ID"
 
 ./build.sh
 
-near deploy -f --wasmFile ./out/conversion_proxy.wasm \
+# TODO
+near deploy -f --wasmFile ./out/fungible_conversion_proxy.wasm \
   --accountId $ACCOUNT_ID \

@@ -23,8 +23,9 @@ pub struct FungibleTokenMetadata {
 
 // For mocks: state of a fungible token
 #[near_bindgen]
-#[derive(Default, BorshDeserialize, BorshSerialize, Serialize)]
+#[derive(BorshDeserialize, BorshSerialize, Serialize)]
 pub struct FungibleTokenContract {
+    symbol: String,
     balances: HashMap<AccountId, U128>,
 }
 
@@ -75,12 +76,16 @@ impl FungibleTokenContract {
         Some(FungibleTokenMetadata {
             spec: "ft-1.0.0".into(),
             name: "USD Coin".into(),
-            symbol: "USDC.e".into(),
+            symbol: self.symbol.to_owned(),
             icon: None,
             reference: None,
             reference_hash: None,
             decimals: 6,
         })
+    }
+    /// Helper function for testing
+    pub fn set_symbol(&mut self, symbol: String) {
+        self.symbol = symbol;
     }
 
     /// Helper function for testing
@@ -110,6 +115,12 @@ impl FungibleTokenContract {
             "account is not registered with fungible token contract"
         );
         self.balances[&account]
+    }
+}
+
+impl Default for FungibleTokenContract {
+    fn default() -> Self {
+        Self { symbol: "USDC.e".into(), balances: HashMap::new() }
     }
 }
 

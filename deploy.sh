@@ -43,7 +43,8 @@ printf "ACCOUNT_ID=%s\n" "$ACCOUNT_ID"
 
 ./build.sh
 
-near deploy -f --wasmFile ./out/conversion_proxy.wasm \
+# TODO
+near deploy -f --wasmFile ./out/fungible_conversion_proxy.wasm \
   --accountId $ACCOUNT_ID \
   --initFunction new  \
   --initArgs '{"oracle_account_id": "'$oracle_account_id'", "provider_account_id": "'$provider_account_id'"}'

@@ -43,6 +43,7 @@ impl FPOContract {
                 decimals: 6,
                 last_update: env::block_timestamp() - 10,
             }),
+            "FAIL/USD" => panic!("ASKED_TO_FAIL"),
             _ => None,
         }
     }
