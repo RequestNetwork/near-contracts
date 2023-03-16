@@ -27,4 +27,4 @@ panic = "abort"
 overflow-checks = true
 
 [workspace]
-members = ["conversion_proxy", "fungible_conversion_proxy", "mocks"]
+members = ["conversion_proxy", "fungible_conversion_proxy", "fungible_proxy", "mocks"]
