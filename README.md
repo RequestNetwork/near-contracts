@@ -103,3 +103,11 @@ near call fau.reqnetwork.testnet storage_deposit '{"account_id": "'$ACCOUNT_ID'"
 # Transfer 1000.00 FAU to the account
 near call fau.reqnetwork.testnet ft_transfer '{"receiver_id": "'$ACCOUNT_ID'", "amount": "1000000000000000000000"}' --accountId reqnetwork.testnet --depositYocto 1
 ```
+
+To use FAU on a new proxy, you need to register it first:
+
+```
+ near call fau.reqnetwork.testnet storage_deposit '{"account_id": "'$PROXY_ADDRESS'"}' --accountId $ACCOUNT_ID --amount 0.005
+```
+
+You need to run the same command for every account before they receive FAU, or the smart contract will panick with the error message `The account some_account is not registered`.
