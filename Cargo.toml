@@ -15,6 +15,7 @@ hex = "0.4"
 near-sdk-sim = "3.2.0"
 conversion_proxy = { path = "./conversion_proxy" }
 fungible_conversion_proxy = { path = "./fungible_conversion_proxy" }
+fungible_proxy = { path = "./fungible_proxy" }
 mocks = { path = "./mocks" }
 
 [profile.release]

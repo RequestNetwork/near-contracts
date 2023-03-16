@@ -2371,6 +2371,7 @@ version = "0.1.0"
 dependencies = [
  "conversion_proxy",
  "fungible_conversion_proxy",
+ "fungible_proxy",
  "hex",
  "mocks",
  "near-sdk",
