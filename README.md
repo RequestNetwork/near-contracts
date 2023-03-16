@@ -21,10 +21,14 @@ Smart contracts on NEAR used by the
 
 ## Unit tests
 
+Run all contracts unit tests like this:
+
 ```
 cd near-contracts/conversion_proxy
 cargo test
 cd near-contracts/fungible_conversion_proxy
+cargo test
+cd near-contracts/fungible_proxy
 cargo test
 cd near-contracts/mocks
 cargo test
@@ -33,7 +37,18 @@ cargo test
 ## Integration tests
 
 ```
+# To test everything
 ./test.sh
+
+# To test contracts one by one:
+cargo test conversion_proxy
+cargo test fungible_conversionproxy
+cargo test fungible_proxy
+
+# To run integration tests one by one (examples with main transfers):
+cargo test conversion_proxy::test_transfer -- --exact
+cargo test fungible_conversionproxy::test_transfer -- --exact
+cargo test fungible_proxy::test_transfer -- --exact
 ```
 
 ## Deploying contract
