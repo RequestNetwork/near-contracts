@@ -9,7 +9,6 @@ near_sdk::setup_alloc!();
 
 const NO_DEPOSIT: Balance = 0;
 const YOCTO_DEPOSIT: Balance = 1; // Fungible token transfers require a deposit of exactly 1 yoctoNEAR
-const ONE_FIAT: Balance = 100; // Fiat values with two decimals
 const MIN_GAS: Gas = 150_000_000_000_000;
 const BASIC_GAS: Gas = 10_000_000_000_000;
 
@@ -22,7 +21,6 @@ const BASIC_GAS: Gas = 10_000_000_000_000;
 /// - `to`: `amount` in `currency` of payment token will be paid to this address
 #[derive(Serialize, Deserialize)]
 pub struct PaymentArgs {
-    pub amount: U128,
     pub fee_address: ValidAccountId,
     pub fee_amount: U128,
     pub payment_reference: String,
@@ -78,7 +76,7 @@ impl FungibleTokenReceiver for FungibleProxy {
     /// This is the function that will be called by the fungible token contract's `ft_transfer_call` function.
     /// We use the `msg` field to obtain the arguments supplied by the caller specifying the intended payment.
     /// `msg` should be a string in JSON format containing all the fields in `PaymentArgs`.
-    /// Eg. msg = {"payment_reference":"abc7c8bb1234fd12","to":"dummy.payee.near","amount":"1000000","currency":"USD","fee_address":"fee.requestfinance.near","fee_amount":"200","max_rate_timespan":"0"}
+    /// Eg. msg = {"payment_reference":"abc7c8bb1234fd12","to":"dummy.payee.near","fee_address":"fee.requestfinance.near","fee_amount":"200"}
     ///
     /// For more information on the fungible token standard, see https://nomicon.io/Standards/Tokens/FungibleToken/Core
     ///
@@ -126,39 +124,38 @@ impl FungibleProxy {
         assert_eq!(reference_vec.len(), 8, "Incorrect payment reference length");
         assert!(args.fee_amount.0 <= amount.0, "amount smaller than fee_amount");
         let main_amount = amount.0 - args.fee_amount.0;
+        let main_transfer_args =
+            json!({ "receiver_id": args.to.to_string(), "amount":main_amount.to_string(), "memo": None::<String> })
+                .to_string()
+                .into_bytes();
 
-        ext_self::on_transfer_with_reference(
-            args,
-            token_address,
-            payer,
-            main_amount.into(),
-            &env::current_account_id(),
-            NO_DEPOSIT,
-            BASIC_GAS,
+        let fee_transfer_args =
+            json!({ "receiver_id": args.fee_address.to_string(), "amount":args.fee_amount.0.to_string(), "memo": None::<String> })
+            .to_string()
+            .into_bytes();
+
+        Promise::new(token_address.to_string())
+            .function_call(
+                "ft_transfer".into(),
+                main_transfer_args,
+                YOCTO_DEPOSIT,
+                BASIC_GAS * 2,
+            )
+            .function_call(
+                "ft_transfer".into(),
+                fee_transfer_args,
+                YOCTO_DEPOSIT,
+                BASIC_GAS * 2,
+            ).then(ext_self::on_transfer_with_reference(
+                args,
+                token_address,
+                payer,
+                main_amount.into(),
+                &env::current_account_id(),
+                NO_DEPOSIT,
+                BASIC_GAS,
+            )
         )
-    }
-
-    /// Convenience function for constructing the `msg` argument for `ft_transfer_call` in the fungible token contract.
-    /// Constructing the `msg` string could also easily be done on the frontend so is included here just for completeness
-    /// and convenience.
-    pub fn get_transfer_with_reference_args(
-        &self,
-        amount: U128,
-        currency: String,
-        fee_address: ValidAccountId,
-        fee_amount: U128,
-        max_rate_timespan: U64,
-        payment_reference: String,
-        to: ValidAccountId,
-    ) -> String {
-        let args = PaymentArgs {
-            amount,
-            fee_address,
-            fee_amount,
-            payment_reference,
-            to,
-        };
-        args.into()
     }
 
     #[private]
