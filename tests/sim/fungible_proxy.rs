@@ -139,7 +139,7 @@ fn test_transfer() {
         fungible_transfer_setup(&alice, &bob, &builder, &ft_contract, send_amt);
 
     let args = PaymentArgs {
-        fee_address: "builder".try_into().unwrap(), // TODO to_string optional?
+        fee_address: "builder".try_into().unwrap(),
         fee_amount: 2000000.into(), // 2 USDC.e
         payment_reference: "abc7c8bb1234fd12".into(),
         to: bob.account_id().try_into().unwrap(),

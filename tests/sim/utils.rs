@@ -31,7 +31,7 @@ pub fn assert_unchanged_balance(account: UserAccount, previous_balance: u128, ft
     assert!(current_balance == previous_balance, "{}'s balance changed by {} (from {} to {})", account_name, previous_balance-current_balance, previous_balance, current_balance);
 }
 
-/// Util to TODO
+/// Util to assert that an account has spent a given amount of token.
 pub fn assert_spent(account: UserAccount, previous_balance: u128, expected_spent_amount: u128, ft_contract: &ContractAccount<FungibleTokenContractContract>) {
     let current_balance = call!(account, ft_contract.ft_balance_of(account.account_id()))
         .unwrap_json::<U128>()
@@ -40,7 +40,7 @@ pub fn assert_spent(account: UserAccount, previous_balance: u128, expected_spent
     assert!(current_balance == previous_balance -expected_spent_amount, "Spent {} instead of {}", previous_balance - current_balance, expected_spent_amount);
 }
 
-/// Util to TODO
+/// Util to assert that an account has received a given amount of token.
 pub fn assert_received(account: UserAccount, previous_balance: u128, expected_received_amount: u128, ft_contract: &ContractAccount<FungibleTokenContractContract>) {
     let current_balance = call!(account, ft_contract.ft_balance_of(account.account_id()))
         .unwrap_json::<U128>()
