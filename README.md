@@ -70,9 +70,36 @@ cargo
 
 ## Calling contract
 
-The snippet below makes a NEAR payment for $80.50, with a $1.00 fee.
+Commands below assumes a few variables are set: `ACCOUNT_ID`, `BUILDER_ID` and `ISSUER_ID`.
+
+This snippet makes a NEAR payment for $80.50, with a $1.00 fee.
 
 ```
-# set ACCOUNT_ID, BUILDER_ID and ISSUER_ID
 near call $ACCOUNT_ID transfer_with_reference '{"to": "'$ISSUER_ID'", "payment_reference": "0x1230012300001234", "amount": "8050", "currency": "USD", "fee_amount": "100", "fee_address": "'$BUILDER_ID'"}' --accountId $ACCOUNT_ID --gas 300000000000000 --deposit 30
+```
+
+This snippet makes a fungible token payment, given that `fau.reqnetwork.testnet` is a fungible token address and the `fungible_proxy` contract is deployed at `pay.reqnetwork.testnet`.
+
+```
+near call fau.reqnetwork.testnet ft_transfer_call '{"receiver_id": "pay.reqnetwork.testnet", "amount": "2500000000000000000", "msg": "{\"fee_address\": \"'$BUILDER_ID'\", \"fee_amount\": \"1000000000000000000\", \"payment_reference\": \"abc7c8bb1234fd12\", \"to\": \"'$ISSUER_ID'\"}"}' --accountId $ACCOUNT_ID --depositYocto 1 --gas 300000000000000
+```
+
+## FAU tokens (testnet)
+
+The FAU token at `fau.reqnetwork.testnet` has 18 decimals and a total supply of 1'000'000.00 FAU.
+It is based on the example at https://github.com/near/near-sdk-rs/tree/master/examples/fungible-token, slightly updated and deployed using the commands:
+
+```
+./build.sh
+near create-account fau.reqnetwork.testnet --masterAccount reqnetwork.testnet --initialBalance 8
+near deploy -f --wasmFile ./res/fungible_token.wasm --accountId fau.reqnetwork.testnet --initFunction new_default_meta --initArgs '{"owner_id": "reqnetwork.testnet", "total_supply": "1000000000000000000000000"}'
+```
+
+Get some FAU:
+
+```
+# Register the account
+near call fau.reqnetwork.testnet storage_deposit '{"account_id": "'$ACCOUNT_ID'"}' --accountId $ACCOUNT_ID --amount 0.005
+# Transfer 1000.00 FAU to the account
+near call fau.reqnetwork.testnet ft_transfer '{"receiver_id": "'$ACCOUNT_ID'", "amount": "1000000000000000000000"}' --accountId reqnetwork.testnet --depositYocto 1
 ```
