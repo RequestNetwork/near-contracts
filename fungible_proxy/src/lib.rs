@@ -237,7 +237,6 @@ mod tests {
     /// Helper function: get default values for PaymentArgs
     fn get_default_payment_args() -> PaymentArgs {
         PaymentArgs {
-            amount: 1000000.into(),
             fee_address: "fee.requestfinance.near".to_string().try_into().unwrap(),
             fee_amount: 200.into(),
             payment_reference: "abc7c8bb1234fd12".into(),
@@ -301,7 +300,7 @@ mod tests {
         let args = get_default_payment_args();
         let msg = get_msg_from_args(args) + ".";
 
-        contract.ft_on_transfer(alice_account(), "1".into(), msg);
+        contract.ft_on_transfer(alice_account(), "1000".into(), msg);
     }
 
     #[test]
@@ -312,9 +311,9 @@ mod tests {
         let mut contract = FungibleProxy::default();
 
         let args = get_default_payment_args();
-        let msg = get_msg_from_args(args).replace("\"amount\":\"1000000\",", "");
+        let msg = get_msg_from_args(args).replace("\"fee_amount\":\"200\",", "");
 
-        contract.ft_on_transfer(alice_account(), "1".into(), msg);
+        contract.ft_on_transfer(alice_account(), "1000000".into(), msg);
     }
 
     #[test]
@@ -327,7 +326,7 @@ mod tests {
         let args = get_default_payment_args();
         let msg = get_msg_from_args(args);
 
-        contract.ft_on_transfer(alice_account(), "1".into(), msg);
+        contract.ft_on_transfer(alice_account(), "100".into(), msg);
     }
 
     #[test]
@@ -347,7 +346,7 @@ mod tests {
         let context = get_context(alice_account(), ntoy(100), MIN_GAS, true);
         testing_env!(context);
 
-        let expected_msg = r#"{"amount":"1000000","fee_address":"fee.requestfinance.near","fee_amount":"200","payment_reference":"abc7c8bb1234fd12","to":"dummy.payee.near"}"#;
+        let expected_msg = r#"{"fee_address":"fee.requestfinance.near","fee_amount":"200","payment_reference":"abc7c8bb1234fd12","to":"dummy.payee.near"}"#;
         let msg: String = get_default_payment_args().into();
         assert_eq!(msg, expected_msg);
     }
