@@ -276,7 +276,7 @@ mod tests {
     #[test]
     #[should_panic(expected = r#"Not enough attached Gas to call this method"#)]
     fn transfer_with_not_enough_gas() {
-        let context = get_context(alice_account(), ntoy(100), 10u64.pow(14), false);
+        let context = get_context(alice_account(), ntoy(100), MIN_GAS - 1, false);
         testing_env!(context);
         let mut contract = FungibleProxy::default();
 
