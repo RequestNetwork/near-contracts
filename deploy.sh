@@ -12,6 +12,7 @@ die() { echo "$*" >&2; exit 2; }  # complain to STDERR and exit with error
 needs_arg() { if [ -z "$OPTARG" ]; then die "Missing arg for --$OPT option"; fi; }
 
 while getopts "pha:-:" OPT; do
+  # Source: https://stackoverflow.com/a/28466267
   if [ "$OPT" = "-" ]; then   # long option: reformulate OPT and OPTARG
     OPT="${OPTARG%%=*}"       # extract long option name
     OPTARG="${OPTARG#$OPT}"   # extract long option argument (may be empty)
@@ -23,8 +24,8 @@ while getopts "pha:-:" OPT; do
       echo "Defaults to testnet."
       echo ""
       echo "Options:"
-      echo "  -p | --mainnet      : for prod deployment"
-      echo "  -a [account_id]     : to override \$ACCOUNT_ID"
+      echo "  -p | --prod | --mainnet     : for prod deployment"
+      echo "  -a [account_id]             : to override \$ACCOUNT_ID"
       echo "  Choose the contract to deploy with:"
       echo "    --conversion_proxy [default]"
       echo "    --fungible_proxy"

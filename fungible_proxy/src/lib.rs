@@ -39,21 +39,11 @@ impl Into<String> for PaymentArgs {
     }
 }
 
-/**
- * Fungible token-related declarations
- */
-
 // Interface of fungible tokens
 #[near_sdk::ext_contract(ft_contract)]
 trait FungibleTokenContract {
     fn ft_transfer(receiver_id: String, amount: String, memo: Option<String>);
 }
-
-///
-/// This contract
-#[near_bindgen]
-#[derive(Default, BorshDeserialize, BorshSerialize)]
-pub struct FungibleProxy {}
 
 // Callback methods
 #[near_sdk::ext_contract(ext_self)]
@@ -70,6 +60,12 @@ pub trait ExtSelfRequestProxy {
 trait FungibleTokenReceiver {
     fn ft_on_transfer(&mut self, sender_id: AccountId, amount: String, msg: String) -> Promise;
 }
+
+///
+/// This contract
+#[near_bindgen]
+#[derive(Default, BorshDeserialize, BorshSerialize)]
+pub struct FungibleProxy {}
 
 #[near_bindgen]
 impl FungibleTokenReceiver for FungibleProxy {
@@ -93,8 +89,8 @@ impl FungibleTokenReceiver for FungibleProxy {
 
 #[near_bindgen]
 impl FungibleProxy {
-    /// Main function for this contract, transfers fungible tokens to a payment address (to) with a payment reference, as well as a fee.
-    /// The `amount` is denominated in `currency` with 2 decimals.
+    /// Main function for this contract. Transfers fungible tokens to the `to` address and fee to the `fee_address`, then logs a `payment_reference`.
+    /// The `amount` is denominated in `token_address` with the according decimals.
     ///
     /// Due to the way NEAR defines the fungible token standard, this function should NOT be called directly. Instead, the
     /// `ft_transfer_call` function in the contract of the fungible token being used for payment should be called with the

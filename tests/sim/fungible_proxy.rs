@@ -14,9 +14,9 @@ use std::str;
 
 near_sdk::setup_alloc!();
 
-const FUNGIBLE_PROXY_ID: &str = "fungible_request_proxy";
+const PROXY_ID: &str = "fungible_proxy";
 lazy_static_include::lazy_static_include_bytes! {
-   FUNGIBLE_REQUEST_PROXY_BYTES => "out/fungible_proxy.wasm"
+   PROXY_BYTES => "out/fungible_proxy.wasm"
 }
 lazy_static_include::lazy_static_include_bytes! {
    MOCKED_BYTES => "out/mocks.wasm"
@@ -47,10 +47,10 @@ fn init_fungible() -> (
     let empty_account_1 = root.create_user("bob".parse().unwrap(), to_yocto(DEFAULT_BALANCE));
     let empty_account_2 = root.create_user("builder".parse().unwrap(), to_yocto(DEFAULT_BALANCE));
 
-    let fungible_request_proxy = deploy!(
+    let proxy = deploy!(
         contract: FungibleProxyContract,
-        contract_id: FUNGIBLE_PROXY_ID,
-        bytes: &FUNGIBLE_REQUEST_PROXY_BYTES,
+        contract_id: PROXY_ID,
+        bytes: &PROXY_BYTES,
         signer_account: root,
         deposit: to_yocto("5")
     );
@@ -59,7 +59,7 @@ fn init_fungible() -> (
         account,
         empty_account_1,
         empty_account_2,
-        fungible_request_proxy,
+        proxy,
         ft_contract,
     )
 }
@@ -78,7 +78,7 @@ fn fungible_transfer_setup(
     call!(builder, ft_contract.register_account(builder.account_id()));
     call!(
         builder,
-        ft_contract.register_account(FUNGIBLE_PROXY_ID.into())
+        ft_contract.register_account(PROXY_ID.into())
     );
 
     // Set initial balances
@@ -96,7 +96,7 @@ fn fungible_transfer_setup(
     );
     call!(
         builder,
-        ft_contract.set_balance(FUNGIBLE_PROXY_ID.into(), 0.into()) // 0 USDC.e
+        ft_contract.set_balance(PROXY_ID.into(), 0.into()) // 0 USDC.e
     );
 
     let alice_balance_before = call!(alice, ft_contract.ft_balance_of(alice.account_id()))
@@ -113,7 +113,7 @@ fn fungible_transfer_setup(
     // The token contract will transfer the specificed tokens from the caller to our contract before calling our contract
     call!(
         alice,
-        ft_contract.set_balance(FUNGIBLE_PROXY_ID.into(), send_amt)
+        ft_contract.set_balance(PROXY_ID.into(), send_amt)
     );
     call!(
         alice,
@@ -132,7 +132,7 @@ fn fungible_transfer_setup(
 
 #[test]
 fn test_transfer() {
-    let (alice, bob, builder, fungible_request_proxy, ft_contract) = init_fungible();
+    let (alice, bob, builder, proxy, ft_contract) = init_fungible();
 
     let send_amt = U128::from(500000000); // 500 USDC.e
     let (alice_balance_before, bob_balance_before, builder_balance_before) =
@@ -147,7 +147,7 @@ fn test_transfer() {
 
     let result = call!(
         ft_contract.user_account,
-        fungible_request_proxy.ft_on_transfer(alice.account_id(), send_amt.0.to_string(), args.into())
+        proxy.ft_on_transfer(alice.account_id(), send_amt.0.to_string(), args.into())
     );
     result.assert_success();
 
@@ -163,7 +163,7 @@ fn test_transfer() {
 
 #[test]
 fn transfer_less_than_fee_amount() {
-    let (alice, bob, builder, fungible_request_proxy, ft_contract) = init_fungible();
+    let (alice, bob, builder, proxy, ft_contract) = init_fungible();
 
     let send_amt = U128::from(500000000); // 500 USDC.e
     let (_, _, _) = fungible_transfer_setup(&alice, &bob, &builder, &ft_contract, send_amt);
@@ -177,14 +177,14 @@ fn transfer_less_than_fee_amount() {
 
     let result = call!(
         ft_contract.user_account,
-        fungible_request_proxy.ft_on_transfer(alice.account_id(), send_amt.0.to_string(), args.into())
+        proxy.ft_on_transfer(alice.account_id(), send_amt.0.to_string(), args.into())
     );
     assert_one_promise_error(result, "amount smaller than fee_amount")
 }
 
 #[test]
 fn test_transfer_receiver_send_failed() {
-    let (alice, bob, builder, fungible_request_proxy, ft_contract) = init_fungible();
+    let (alice, bob, builder, proxy, ft_contract) = init_fungible();
 
     let send_amt = U128::from(500000000); // 500 USDC.e
     let (alice_balance_before, _, _) =
@@ -194,18 +194,16 @@ fn test_transfer_receiver_send_failed() {
     // Receiver is not registered with the token contract, so sending to it will fail
     call!(bob, ft_contract.unregister_account(bob.account_id()));
 
-    // Constuct the `msg` argument using our contract
-    // Transferring 100 USD worth of USDC.e from alice to bob, with a 2 USD fee to builder
     let args = PaymentArgs {
             fee_address: "builder".try_into().unwrap(),
-            fee_amount: 200.into(), // 2 USD
+            fee_amount: 2000000.into(), // 2 USDC.e
             payment_reference: "abc7c8bb1234fd12".into(),
             to: bob.account_id().try_into().unwrap()
     };
 
     let result = call!(
         ft_contract.user_account,
-        fungible_request_proxy.ft_on_transfer(alice.account_id(), send_amt.0.to_string(), args.into())
+        proxy.ft_on_transfer(alice.account_id(), send_amt.0.to_string(), args.into())
     );
     result.assert_success();
     let change = result.unwrap_json::<String>().parse::<u128>().unwrap();
@@ -221,7 +219,7 @@ fn test_transfer_receiver_send_failed() {
 
 #[test]
 fn test_transfer_fee_receiver_send_failed() {
-    let (alice, bob, builder, fungible_request_proxy, ft_contract) = init_fungible();
+    let (alice, bob, builder, proxy, ft_contract) = init_fungible();
 
     let send_amt = U128::from(500000000); // 500 USDC.e
     let (alice_balance_before, _, _) =
@@ -243,7 +241,7 @@ fn test_transfer_fee_receiver_send_failed() {
 
     let result = call!(
         ft_contract.user_account,
-        fungible_request_proxy.ft_on_transfer(alice.account_id(), send_amt.0.to_string(), args.into())
+        proxy.ft_on_transfer(alice.account_id(), send_amt.0.to_string(), args.into())
     );
     result.assert_success();
     // The mocked fungible token does not handle change
@@ -254,7 +252,7 @@ fn test_transfer_fee_receiver_send_failed() {
 
 #[test]
 fn test_transfer_zero_usd() {
-    let (alice, bob, builder, fungible_request_proxy, ft_contract) = init_fungible();
+    let (alice, bob, builder, proxy, ft_contract) = init_fungible();
 
     let send_amt = U128::from(0); // 0 USDC.e
     let (alice_balance_before, bob_balance_before, builder_balance_before) =
@@ -268,7 +266,7 @@ fn test_transfer_zero_usd() {
     };
     let result = call!(
         ft_contract.user_account,
-        fungible_request_proxy.ft_on_transfer(alice.account_id(), send_amt.0.to_string(), args.into())
+        proxy.ft_on_transfer(alice.account_id(), send_amt.0.to_string(), args.into())
     );
     result.assert_success();
 
