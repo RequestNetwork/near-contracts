@@ -47,7 +47,7 @@ trait FungibleTokenContract {
 
 // Callback methods
 #[near_sdk::ext_contract(ext_self)]
-pub trait ExtSelfRequestProxy {
+trait ExtSelfRequestProxy {
     fn on_transfer_with_reference(
         &self,
         args: PaymentArgs,

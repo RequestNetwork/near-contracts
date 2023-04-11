@@ -13,9 +13,9 @@ use std::str;
 
 near_sdk::setup_alloc!();
 
-const PROXY_ID: &str = "request_proxy";
+const PROXY_ID: &str = "conversion_proxy";
 lazy_static_include::lazy_static_include_bytes! {
-   REQUEST_PROXY_BYTES => "out/conversion_proxy.wasm"
+   PROXY_BYTES => "out/conversion_proxy.wasm"
 }
 lazy_static_include::lazy_static_include_bytes! {
    MOCKED_BYTES => "out/mocks.wasm"
@@ -47,16 +47,16 @@ fn init() -> (
     let empty_account_1 = root.create_user("bob".parse().unwrap(), zero_balance);
     let empty_account_2 = root.create_user("builder".parse().unwrap(), zero_balance);
 
-    let request_proxy = deploy!(
+    let proxy = deploy!(
         contract: ConversionProxyContract,
         contract_id: PROXY_ID,
-        bytes: &REQUEST_PROXY_BYTES,
+        bytes: &PROXY_BYTES,
         signer_account: root,
         deposit: to_yocto("5"),
         init_method: new("mockedfpo".into(), "any".into())
     );
 
-    let get_oracle_result = call!(root, request_proxy.get_oracle_account());
+    let get_oracle_result = call!(root, proxy.get_oracle_account());
     get_oracle_result.assert_success();
 
     debug_assert_eq!(
@@ -64,12 +64,12 @@ fn init() -> (
         &"mockedfpo".to_string()
     );
 
-    (account, empty_account_1, empty_account_2, request_proxy)
+    (account, empty_account_1, empty_account_2, proxy)
 }
 
 #[test]
 fn test_transfer() {
-    let (alice, bob, builder, request_proxy) = init();
+    let (alice, bob, builder, proxy) = init();
     let initial_alice_balance = alice.account().unwrap().amount;
     let initial_bob_balance = bob.account().unwrap().amount;
     let initial_builder_balance = builder.account().unwrap().amount;
@@ -81,7 +81,7 @@ fn test_transfer() {
     // Token transfer failed
     let result = call!(
         alice,
-        request_proxy.transfer_with_reference(
+        proxy.transfer_with_reference(
             "0x1122334455667788".to_string(),
             payment_address,
             // 12000.00 USD (main)
@@ -135,14 +135,14 @@ fn test_transfer() {
 fn test_transfer_with_invalid_reference_length() {
     let transfer_amount = to_yocto("500");
 
-    let (alice, bob, builder, request_proxy) = init();
+    let (alice, bob, builder, proxy) = init();
     let payment_address = bob.account_id().try_into().unwrap();
     let fee_address = builder.account_id().try_into().unwrap();
 
     // Token transfer failed
     let result = call!(
         alice,
-        request_proxy.transfer_with_reference(
+        proxy.transfer_with_reference(
             "0x11223344556677".to_string(),
             payment_address,
             U128::from(12),
@@ -169,7 +169,7 @@ fn test_transfer_with_invalid_reference_length() {
 
 #[test]
 fn test_transfer_with_wrong_currency() {
-    let (alice, bob, builder, request_proxy) = init();
+    let (alice, bob, builder, proxy) = init();
     let transfer_amount = to_yocto("100");
     let payment_address = bob.account_id().try_into().unwrap();
     let fee_address = builder.account_id().try_into().unwrap();
@@ -177,7 +177,7 @@ fn test_transfer_with_wrong_currency() {
     // Token transfer failed
     let result = call!(
         alice,
-        request_proxy.transfer_with_reference(
+        proxy.transfer_with_reference(
             "0x1122334455667788".to_string(),
             payment_address,
             U128::from(1200),
@@ -193,7 +193,7 @@ fn test_transfer_with_wrong_currency() {
 
 #[test]
 fn test_transfer_zero_usd() {
-    let (alice, bob, builder, request_proxy) = init();
+    let (alice, bob, builder, proxy) = init();
     let initial_alice_balance = alice.account().unwrap().amount;
     let initial_bob_balance = bob.account().unwrap().amount;
     let transfer_amount = to_yocto("100");
@@ -202,7 +202,7 @@ fn test_transfer_zero_usd() {
 
     let result = call!(
         alice,
-        request_proxy.transfer_with_reference(
+        proxy.transfer_with_reference(
             "0x1122334455667788".to_string(),
             payment_address,
             U128::from(0),
@@ -235,14 +235,14 @@ fn test_transfer_zero_usd() {
 
 #[test]
 fn test_outdated_rate() {
-    let (alice, bob, builder, request_proxy) = init();
+    let (alice, bob, builder, proxy) = init();
     let transfer_amount = to_yocto("100");
     let payment_address = bob.account_id().try_into().unwrap();
     let fee_address = builder.account_id().try_into().unwrap();
 
     let result = call!(
         alice,
-        request_proxy.transfer_with_reference(
+        proxy.transfer_with_reference(
             "0x1122334455667788".to_string(),
             payment_address,
             U128::from(0),
