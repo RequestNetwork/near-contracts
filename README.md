@@ -63,9 +63,12 @@ cargo
 ./deploy.sh -a ACCOUNT_ID
 
 # 2. For subsequent contract updates
-./patch-deploy.sh -a ACCOUNT_ID
+./deploy.sh -a ACCOUNT_ID --patch
 
 # For both commands, use `-p` for production deployment.
+
+# For more details and options:
+./deploy.sh --help
 ```
 
 ## Calling contract

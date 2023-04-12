@@ -210,7 +210,7 @@ impl FungibleProxy {
         } else {
              // return full amount for `ft_resolve_transfer` on the token contract
             let change = (amount.0 + args.fee_amount.0).to_string();
-            log!("Failed to transfer to account {}. Returning attached amount of {} of token {} to {}", args.to, change, token_address, payer);
+            log!("Transfer failed to {} or {}. Returning attached amount of {} of token {} to {}", args.to, args.fee_address, change, token_address, payer);
             change
         }
     }

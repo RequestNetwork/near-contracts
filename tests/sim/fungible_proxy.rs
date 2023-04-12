@@ -219,7 +219,7 @@ fn test_transfer_receiver_send_failed() {
     );
     result.assert_success();
     assert_eq!(result.logs().len(), 1, "Wrong number of logs");
-    assert_eq!(result.logs()[0], "Failed to transfer to account bob. Returning attached amount of 500000000 of token mockedft to alice");
+    assert_eq!(result.logs()[0], "Transfer failed to bob or builder. Returning attached amount of 500000000 of token mockedft to alice");
 
     // The mocked fungible token does not handle change
     let change = result.unwrap_json::<String>().parse::<u128>().unwrap();
@@ -259,7 +259,7 @@ fn test_transfer_fee_receiver_send_failed() {
     );
     result.assert_success();
     assert_eq!(result.logs().len(), 1, "Wrong number of logs");
-    assert_eq!(result.logs()[0], "Failed to transfer to account bob. Returning attached amount of 500000000 of token mockedft to alice");
+    assert_eq!(result.logs()[0], "Transfer failed to bob or builder. Returning attached amount of 500000000 of token mockedft to alice");
 
     // The mocked fungible token does not handle change
     let change = result.unwrap_json::<String>().parse::<u128>().unwrap();
