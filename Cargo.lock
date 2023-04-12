@@ -960,6 +960,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "fungible_proxy"
+version = "0.0.1"
+dependencies = [
+ "hex",
+ "near-sdk",
+ "near-sdk-sim",
+ "serde",
+]
+
+[[package]]
 name = "funty"
 version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2361,6 +2371,7 @@ version = "0.1.0"
 dependencies = [
  "conversion_proxy",
  "fungible_conversion_proxy",
+ "fungible_proxy",
  "hex",
  "mocks",
  "near-sdk",

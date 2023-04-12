@@ -6,44 +6,55 @@
 NEAR_ENV="testnet"
 oracle_account_id="fpo.opfilabs.testnet"
 provider_account_id="opfilabs.testnet"
+contract_name="conversion_proxy";
 
-while getopts ":a:ph" opt; do
-  case $opt in
-    h)
+die() { echo "$*" >&2; exit 2; }  # complain to STDERR and exit with error
+needs_arg() { if [ -z "$OPTARG" ]; then die "Missing arg for --$OPT option"; fi; }
+
+while getopts "pha:-:" OPT; do
+  # Source: https://stackoverflow.com/a/28466267
+  if [ "$OPT" = "-" ]; then   # long option: reformulate OPT and OPTARG
+    OPT="${OPTARG%%=*}"       # extract long option name
+    OPTARG="${OPTARG#$OPT}"   # extract long option argument (may be empty)
+    OPTARG="${OPTARG#=}"      # if long option argument, remove assigning `=`
+  fi
+  case "$OPT" in
+    h | help)
       echo "Builds and deploys the contract with state initialization (first deployement)."
       echo "Defaults to testnet."
       echo ""
       echo "Options:"
-      echo "  -p              : for prod deployment"
-      echo "  -a [account_id] : to override \$ACCOUNT_ID"
+      echo "  -p | --prod | --mainnet     : for prod deployment"
+      echo "  -a [account_id]             : to override \$ACCOUNT_ID"
+      echo "  Choose the contract to deploy with:"
+      echo "    --conversion_proxy [default]"
+      echo "    --fungible_proxy"
+      echo "    --fungible_conversionproxy"
       exit 0
       ;;
-    p)
-      NEAR_ENV="mainnet"
-      oracle_account_id="fpo.opfilabs.near"
-      provider_account_id="opfilabs.near"
-      ;;
-    a)
-      ACCOUNT_ID="$OPTARG"
-      ;;
-    \?)
-      echo "Invalid option -$OPTARG" >&2
-      exit 1
-      ;;
-    :)
-      echo "Option -$OPTARG needs a valid argument"
-      exit 1
-    ;;
+    p | prod | mainnet) NEAR_ENV="mainnet" ;;
+    a | account_id) needs_arg; ACCOUNT_ID="$OPTARG" ;;
+    conversion_proxy | fungible_proxy | fungible_conversion_proxy) contract_name="$OPT" ;;
+    ??* )          die "Unknown option --$OPT" ;;   # bad long option
+    ? )            exit 2 ;;                        # bad short option (error reported via getopts)
   esac
-
 done
 
-printf "NEAR_ENV=%s\n" "$NEAR_ENV"
-printf "ACCOUNT_ID=%s\n" "$ACCOUNT_ID"
+if [ "$ACCOUNT_ID" = "" ]; then
+ echo "Missing account ID";
+ exit 1;
+fi
+
+printf "Deploying %s on NEAR_ENV=%s with ACCOUNT_ID=%s\n\n" "$contract_name" "$NEAR_ENV" "$ACCOUNT_ID"
 
 ./build.sh
 
-near deploy -f --wasmFile ./out/conversion_proxy.wasm \
-  --accountId $ACCOUNT_ID \
-  --initFunction new  \
-  --initArgs '{"oracle_account_id": "'$oracle_account_id'", "provider_account_id": "'$provider_account_id'"}'
+if [ "$contract_name" = "fungible_proxy" ]; then
+  near deploy -f --wasmFile ./out/$contract_name.wasm \
+    --accountId $ACCOUNT_ID
+else
+  near deploy -f --wasmFile ./out/$contract_name.wasm \
+    --accountId $ACCOUNT_ID \
+    --initFunction new  \
+    --initArgs '{"oracle_account_id": "'$oracle_account_id'", "provider_account_id": "'$provider_account_id'"}'
+fi
