@@ -66,12 +66,9 @@ impl FungibleTokenContract {
             U128::from(old_sender_balance.0 - amt),
         );
         self.set_balance(receiver_id, U128::from(old_receiver_balance.0 + amt));
-
-        env::log(format!("ft_transfer OK").as_bytes());
     }
 
     pub fn ft_metadata(&self) -> Option<FungibleTokenMetadata> {
-        env::log(format!("ft_metadata OK").as_bytes());
         Some(FungibleTokenMetadata {
             spec: "ft-1.0.0".into(),
             name: "USD Coin".into(),

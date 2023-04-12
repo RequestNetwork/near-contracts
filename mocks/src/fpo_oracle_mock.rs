@@ -29,7 +29,6 @@ pub struct FPOContract {}
 impl FPOContract {
     #[allow(unused_variables)]
     pub fn get_entry(&self, pair: String, provider: AccountId) -> Option<PriceEntry> {
-        env::log(format!("get_entry OK").as_bytes());
         match &*pair {
             "NEAR/USD" => Some(PriceEntry {
                 // 1 NEAR = 1.234 USD, 10 nanoseconds ago
