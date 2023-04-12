@@ -3,7 +3,7 @@ use near_sdk::json_types::{ValidAccountId, U128, U64};
 use near_sdk::serde::{Deserialize, Serialize};
 use near_sdk::serde_json::json;
 use near_sdk::{
-    env, near_bindgen, serde_json, AccountId, Balance, Gas, Promise, PromiseResult, Timestamp,
+    env, near_bindgen, serde_json, AccountId, Balance, Gas, Promise, PromiseResult, Timestamp, log,
 };
 
 near_sdk::setup_alloc!();
@@ -216,12 +216,9 @@ impl ConversionProxy {
             );
             true
         } else {
-            env::log(
-                format!(
-                    "Failed to transfer to account {}. Returning attached deposit of {} to {}",
-                    payment_address, deposit.0, predecessor_account_id
-                )
-                .as_bytes(),
+            log!(
+                "Failed to transfer to account {}. Returning attached deposit of {} to {}",
+                payment_address, deposit.0, predecessor_account_id
             );
             Promise::new(predecessor_account_id).transfer(deposit.into());
             false

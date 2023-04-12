@@ -3,7 +3,7 @@ use near_sdk::json_types::{Base64VecU8, ValidAccountId, U128, U64};
 use near_sdk::serde::{Deserialize, Serialize};
 use near_sdk::serde_json::json;
 use near_sdk::{
-    env, near_bindgen, serde_json, AccountId, Balance, Gas, Promise, PromiseResult, Timestamp,
+    env, near_bindgen, serde_json, AccountId, Balance, Gas, Promise, PromiseResult, Timestamp, log,
 };
 near_sdk::setup_alloc!();
 
@@ -291,11 +291,9 @@ impl FungibleConversionProxy {
             );
             change.0.to_string() // return change for `ft_resolve_transfer` on the token contract
         } else {
-            env::log(
-                format!(
+            log!(
                     "Failed to transfer to account {}. Returning attached deposit of {} of token {} to {}",
-                    args.to, deposit.0, token_address, payer)
-                .as_bytes(),
+                    args.to, deposit.0, token_address, payer
             );
             deposit.0.to_string() // return full amount for `ft_resolve_transfer` on the token contract
         }

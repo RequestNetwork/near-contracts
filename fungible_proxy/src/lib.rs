@@ -1,5 +1,6 @@
 use near_sdk::borsh::{self, BorshDeserialize, BorshSerialize};
 use near_sdk::json_types::{ValidAccountId, U128};
+use near_sdk::log;
 use near_sdk::serde::{Deserialize, Serialize};
 use near_sdk::serde_json::json;
 use near_sdk::{
@@ -180,12 +181,7 @@ impl FungibleProxy {
         } else {
              // return full amount for `ft_resolve_transfer` on the token contract
             let change = (amount.0 + args.fee_amount.0).to_string();
-            env::log(
-                format!(
-                    "Failed to transfer to account {}. Returning attached amount of {} of token {} to {}",
-                    args.to, change, token_address, payer)
-                .as_bytes(),
-            );
+            log!("Failed to transfer to account {}. Returning attached amount of {} of token {} to {}", args.to, change, token_address, payer);
             change
         }
     }
