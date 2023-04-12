@@ -3,6 +3,7 @@ use fungible_proxy::PaymentArgs;
 use fungible_proxy::FungibleProxyContract;
 use mocks::fungible_token_mock::FungibleTokenContractContract;
 use near_sdk::json_types::{U128};
+use near_sdk::serde_json::json;
 use near_sdk_sim::init_simulator;
 use near_sdk_sim::runtime::GenesisConfig;
 use near_sdk_sim::ContractAccount;
@@ -139,9 +140,9 @@ fn test_transfer() {
         fungible_transfer_setup(&alice, &bob, &builder, &ft_contract, send_amt);
 
     let args = PaymentArgs {
-        fee_address: "builder".try_into().unwrap(),
+        fee_address: builder.account_id().try_into().unwrap(),
         fee_amount: 2000000.into(), // 2 USDC.e
-        payment_reference: "abc7c8bb1234fd12".into(),
+        payment_reference: "abc7c8bb1234fd11".into(),
         to: bob.account_id().try_into().unwrap(),
     };
 
@@ -150,6 +151,17 @@ fn test_transfer() {
         proxy.ft_on_transfer(alice.account_id(), send_amt.0.to_string(), args.into())
     );
     result.assert_success();
+    assert_eq!(result.logs().len(), 1, "Wrong number of logs");
+    let expected_log = json!({
+        "amount": "498000000", // 500 USDC.e - 2 USDC.e fee
+        "token_address": "mockedft",
+        "fee_address": "builder",
+        "fee_amount": "2000000",
+        "payment_reference": "abc7c8bb1234fd11",
+        "to": "bob",
+    })
+    .to_string();
+    assert_eq!(result.logs()[0], expected_log);
 
     // The mocked fungible token does not handle change
     let change = result.unwrap_json::<String>().parse::<u128>().unwrap();
@@ -195,7 +207,7 @@ fn test_transfer_receiver_send_failed() {
     call!(bob, ft_contract.unregister_account(bob.account_id()));
 
     let args = PaymentArgs {
-            fee_address: "builder".try_into().unwrap(),
+            fee_address: builder.account_id().try_into().unwrap(),
             fee_amount: 2000000.into(), // 2 USDC.e
             payment_reference: "abc7c8bb1234fd12".into(),
             to: bob.account_id().try_into().unwrap()
@@ -206,12 +218,17 @@ fn test_transfer_receiver_send_failed() {
         proxy.ft_on_transfer(alice.account_id(), send_amt.0.to_string(), args.into())
     );
     result.assert_success();
+    assert_eq!(result.logs().len(), 1, "Wrong number of logs");
+    assert_eq!(result.logs()[0], format!("Failed to transfer to account bob. Returning attached amount of 500000000 of token mockedft to alice"));
+
+    // The mocked fungible token does not handle change
     let change = result.unwrap_json::<String>().parse::<u128>().unwrap();
 
-    let alice_balance_after = call!(alice, ft_contract.ft_balance_of(alice.account_id()))
-        .unwrap_json::<U128>()
+     let result = call!(alice, ft_contract.ft_balance_of(alice.account_id()));
+     let alice_balance_after = result.unwrap_json::<U128>()
         .0
         + change;
+        
 
     // Ensure no balance changes / all funds returned to sender
     assert!(alice_balance_after == alice_balance_before);
@@ -227,10 +244,7 @@ fn test_transfer_fee_receiver_send_failed() {
 
     // Previous line registers all accounts, so we unregister builder here
     // Fee_receiver is not registered with the token contract, so sending to it will fail
-    call!(
-        builder,
-        ft_contract.unregister_account(builder.account_id())
-    );
+    call!(builder, ft_contract.unregister_account(builder.account_id()));
 
     let args = PaymentArgs {
             fee_address: "builder".try_into().unwrap(),
@@ -244,8 +258,12 @@ fn test_transfer_fee_receiver_send_failed() {
         proxy.ft_on_transfer(alice.account_id(), send_amt.0.to_string(), args.into())
     );
     result.assert_success();
+    assert_eq!(result.logs().len(), 1, "Wrong number of logs");
+    assert_eq!(result.logs()[0], format!("Failed to transfer to account bob. Returning attached amount of 500000000 of token mockedft to alice"));
+
     // The mocked fungible token does not handle change
     let change = result.unwrap_json::<String>().parse::<u128>().unwrap();
+    assert_eq!(change, 500000000);
 
     assert_unchanged_balance(alice, alice_balance_before.sub(change), &ft_contract, "Alice");
 }
@@ -269,6 +287,17 @@ fn test_transfer_zero_usd() {
         proxy.ft_on_transfer(alice.account_id(), send_amt.0.to_string(), args.into())
     );
     result.assert_success();
+    assert_eq!(result.logs().len(), 1, "Wrong number of logs");
+    let expected_log = json!({
+        "amount": "0",
+        "token_address": "mockedft",
+        "fee_address": "builder",
+        "fee_amount": "0",
+        "payment_reference": "abc7c8bb1234fd12",
+        "to": "bob",
+    })
+    .to_string();
+    assert_eq!(result.logs()[0], expected_log);
 
     assert_unchanged_balance(alice, alice_balance_before, &ft_contract, "Alice");
     assert_unchanged_balance(bob, bob_balance_before, &ft_contract, "Bob");

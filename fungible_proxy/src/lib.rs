@@ -178,13 +178,15 @@ impl FungibleProxy {
             );
             0.to_string()
         } else {
+             // return full amount for `ft_resolve_transfer` on the token contract
+            let change = (amount.0 + args.fee_amount.0).to_string();
             env::log(
                 format!(
                     "Failed to transfer to account {}. Returning attached amount of {} of token {} to {}",
-                    args.to, amount.0, token_address, payer)
+                    args.to, change, token_address, payer)
                 .as_bytes(),
             );
-            (amount.0 + args.fee_amount.0).to_string() // return full amount for `ft_resolve_transfer` on the token contract
+            change
         }
     }
 }
