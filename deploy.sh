@@ -21,7 +21,7 @@ while getopts "pha:-:" OPT; do
   fi
   case "$OPT" in
     h | help)
-      echo "Builds and deploys the contract with state initialization (first deployement)."
+      echo "Builds and deploys contracts, eventually with state initialization."
       echo "Defaults to testnet."
       echo ""
       echo "Options:"
