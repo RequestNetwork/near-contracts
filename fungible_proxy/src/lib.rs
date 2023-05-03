@@ -131,19 +131,48 @@ impl FungibleProxy {
             .to_string()
             .into_bytes();
 
-        Promise::new(token_address.to_string())
-            .function_call(
-                "ft_transfer".into(),
-                main_transfer_args,
-                YOCTO_DEPOSIT,
-                BASIC_GAS * 2,
-            )
-            .function_call(
-                "ft_transfer".into(),
-                fee_transfer_args,
-                YOCTO_DEPOSIT,
-                BASIC_GAS * 2,
-            ).then(ext_self::on_transfer_with_reference(
+        // Some tokens revert when calling `ft_transfer` with 0
+        let payment_promise = 
+            if main_amount > 0 && args.fee_amount.0 > 0 {
+                // Main case: amount and fee
+                Promise::new(token_address.to_string())
+                .function_call(
+                    "ft_transfer".into(),
+                    main_transfer_args,
+                    YOCTO_DEPOSIT,
+                    BASIC_GAS * 2,
+                )
+                .function_call(
+                    "ft_transfer".into(),
+                    fee_transfer_args,
+                    YOCTO_DEPOSIT,
+                    BASIC_GAS * 2,
+                )
+            } else if main_amount > 0 {
+                // No fee
+                Promise::new(token_address.to_string())
+                .function_call(
+                    "ft_transfer".into(),
+                    main_transfer_args,
+                    YOCTO_DEPOSIT,
+                    BASIC_GAS * 2,
+                )
+            } else if args.fee_amount.0 > 0 {
+                // Only fee payment
+                Promise::new(token_address.to_string())
+                .function_call(
+                    "ft_transfer".into(),
+                    fee_transfer_args,
+                    YOCTO_DEPOSIT,
+                    BASIC_GAS * 2,
+                )
+            } else {
+                // No payment
+                Promise::new(token_address.to_string())
+            };
+
+        payment_promise
+            .then(ext_self::on_transfer_with_reference(
                 args,
                 token_address,
                 payer,
