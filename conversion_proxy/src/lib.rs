@@ -16,22 +16,40 @@ const MIN_GAS: Gas = 50_000_000_000_000;
 const BASIC_GAS: Gas = 10_000_000_000_000;
 
 /**
- * Flux oracle-related declarations
+ * Switchboard oracle-related declarations
  */
 
-// Return type the Flux price oracle
+
 #[derive(BorshDeserialize, BorshSerialize, Serialize, Deserialize)]
-pub struct PriceEntry {
-    pub price: U128,            // Last reported price
-    pub decimals: u16,          // Amount of decimals (e.g. if 2, 100 = 1.00)
-    pub last_update: Timestamp, // Time of report
+pub struct SwitchboardDecimal {
+    pub mantissa: i128,
+    pub scale: u32,
 }
 
-// Interface of the Flux price oracle
-#[near_sdk::ext_contract(fpo_contract)]
-trait FPOContract {
-    fn get_entry(pair: String, provider: AccountId) -> Promise<PriceEntry>;
+#[derive(BorshDeserialize, BorshSerialize, Serialize, Deserialize)]
+pub struct PriceEntry {
+    // pub price: U128,            // Last reported price
+    // pub decimals: u16,          // Amount of decimals (e.g. if 2, 100 = 1.00)
+    // pub last_update: Timestamp, // Time of report
+    pub result: SwitchboardDecimal,
+    pub num_success: u32,
+    pub num_error: u32,
+    pub round_open_timestamp: Timestamp,
 }
+
+#[derive(BorshDeserialize, BorshSerialize, Serialize, Deserialize)]
+pub struct SwitchboarIx {
+    pub address: Vec<u8>,
+    pub payer: Vec<u8>,
+}
+
+
+// Interface of the Switchboard price oracle
+#[near_sdk::ext_contract(sb_contract)]
+trait Switchboard {
+    fn aggregator_read(ix: SwitchboarIx) -> Promise<PriceEntry>;
+}
+
 
 ///
 /// This contract
@@ -41,8 +59,9 @@ trait FPOContract {
 #[near_bindgen]
 #[derive(Default, BorshDeserialize, BorshSerialize)]
 pub struct ConversionProxy {
-    pub oracle_account_id: AccountId,
-    pub provider_account_id: AccountId,
+    pub oracle_account: Vec<u8>,
+    pub payer:Vec<u8>,
+    // pub provider_account_id: AccountId,
     pub owner_id: AccountId,
 }
 
@@ -112,13 +131,10 @@ impl ConversionProxy {
             .expect("Payment reference value error");
         assert_eq!(reference_vec.len(), 8, "Incorrect payment reference length");
 
-        let get_rate = fpo_contract::get_entry(
-            "NEAR/".to_owned() + &currency,
-            self.provider_account_id.clone(),
-            &self.oracle_account_id,
+        let get_rate = sb_contract::aggregator_read(SwitchboarIx {address: self.oracle_account.clone(), payer: self.payer.clone()},
+            &bs58::encode(self.oracle_account.clone()).into_string(),
             NO_DEPOSIT,
-            BASIC_GAS,
-        );
+            BASIC_GAS,);
         let callback_gas = BASIC_GAS * 3;
         let process_request_payment = ext_self::rate_callback(
             to,
@@ -137,39 +153,27 @@ impl ConversionProxy {
     }
 
     #[init]
-    pub fn new(oracle_account_id: AccountId, provider_account_id: AccountId) -> Self {
+    pub fn new(oracle_account: Vec<u8>) -> Self {
         let owner_id = env::signer_account_id();
+        let payer = bs58::decode(owner_id.clone()).into_vec().expect("Could not decode owner");
         Self {
-            oracle_account_id,
-            provider_account_id,
+            oracle_account,
+            payer,
             owner_id,
         }
     }
 
-    pub fn set_oracle_account(&mut self, oracle: ValidAccountId) {
+    pub fn set_oracle_account(&mut self, oracle: Vec<u8>) {
         let signer_id = env::predecessor_account_id();
         if self.owner_id == signer_id {
-            self.oracle_account_id = oracle.to_string();
+            self.oracle_account = oracle;
         } else {
             panic!("ERR_PERMISSION");
         }
     }
 
-    pub fn get_oracle_account(&self) -> AccountId {
-        return self.oracle_account_id.to_string();
-    }
-
-    pub fn set_provider_account(&mut self, oracle: ValidAccountId) {
-        let signer_id = env::predecessor_account_id();
-        if self.owner_id == signer_id {
-            self.provider_account_id = oracle.to_string();
-        } else {
-            panic!("ERR_PERMISSION");
-        }
-    }
-
-    pub fn get_provider_account(&self) -> AccountId {
-        return self.provider_account_id.to_string();
+    pub fn get_oracle_account(&self) -> Vec<u8> {
+        return self.oracle_account.clone();
     }
 
     pub fn set_owner(&mut self, owner: ValidAccountId) {
@@ -255,26 +259,29 @@ impl ConversionProxy {
         // Check rate validity
         assert!(
             u64::from(max_rate_timespan) == 0
-                || rate.last_update >= env::block_timestamp() - u64::from(max_rate_timespan),
+                || rate.round_open_timestamp >= env::block_timestamp() - u64::from(max_rate_timespan),
             "Conversion rate too old (Last updated: {})",
-            rate.last_update,
+            rate.round_open_timestamp,
         );
-        let conversion_rate = u128::from(rate.price);
-        let decimals = u32::from(rate.decimals);
+        let conversion_rate = 0_u128.checked_add_signed(rate.result.mantissa).expect("Negative conversion rate");
+        let decimals = u32::from(rate.result.scale);
         let main_payment =
-            Balance::from(amount) * ONE_NEAR * 10u128.pow(decimals) / conversion_rate / ONE_FIAT;
+            (Balance::from(amount) * ONE_NEAR * 10u128.pow(decimals) / conversion_rate / ONE_FIAT) as u128;
         let fee_payment = Balance::from(fee_amount) * ONE_NEAR * 10u128.pow(decimals)
             / conversion_rate
             / ONE_FIAT;
 
         let total_payment = main_payment + fee_payment;
         // Check deposit
-        assert!(
-            total_payment <= env::attached_deposit(),
-            "Deposit too small for payment (Supplied: {}. Demand (incl. fees): {})",
-            env::attached_deposit(),
-            total_payment
-        );
+        if total_payment > env::attached_deposit() {
+            
+            Promise::new(payer.clone().to_string()).transfer(env::attached_deposit());
+            panic!(
+                "Deposit too small for payment (Supplied: {}. Demand (incl. fees): {})",
+                env::attached_deposit(),
+                total_payment
+            );
+        }
 
         let change = env::attached_deposit() - (total_payment);
 
