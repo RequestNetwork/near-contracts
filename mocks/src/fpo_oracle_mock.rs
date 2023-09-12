@@ -51,7 +51,7 @@ impl FPOContract {
 mod tests {
 
     use super::*;
-    use crate::fpo_oracle_mock::AccountId;
+    // use crate::fpo_oracle_mock::AccountId;
     use near_sdk::{testing_env, Balance, Gas, MockedBlockchain, VMContext};
     use near_sdk_sim::to_yocto;
 

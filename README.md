@@ -37,7 +37,7 @@ cargo test
 ## Integration tests
 
 ```
-# To test everything
+# To test everything (unit tests, sanity checks, simulated tests)
 ./test.sh
 
 # To test contracts one by one:

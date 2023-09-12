@@ -249,6 +249,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "771fe0050b883fcc3ea2359b1a96bcfbc090b7116eae7c3c512c7a083fdf23d3"
 
 [[package]]
+name = "bs58"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f5353f36341f7451062466f0b755b96ac3a9547e4d7f6b70d603fc721a7d7896"
+dependencies = [
+ "tinyvec",
+]
+
+[[package]]
 name = "byte-slice-cast"
 version = "1.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1524,7 +1533,7 @@ dependencies = [
  "arrayref",
  "blake2",
  "borsh",
- "bs58",
+ "bs58 0.4.0",
  "c2-chacha",
  "curve25519-dalek",
  "derive_more",
@@ -1571,7 +1580,7 @@ checksum = "75ed2263518ca67a3c158c144813832fd96f48ab239494bb9d7793d315f31417"
 dependencies = [
  "base64",
  "borsh",
- "bs58",
+ "bs58 0.4.0",
  "byteorder",
  "chrono",
  "derive_more",
@@ -1603,7 +1612,7 @@ checksum = "c2b3fb5acf3a494aed4e848446ef2d6ebb47dbe91c681105d4d1786c2ee63e52"
 dependencies = [
  "base64",
  "borsh",
- "bs58",
+ "bs58 0.4.0",
  "derive_more",
  "hex",
  "lazy_static",
@@ -1686,7 +1695,7 @@ checksum = "c7383e242d3e07bf0951e8589d6eebd7f18bb1c1fc5fbec3fad796041a6aebd1"
 dependencies = [
  "base64",
  "borsh",
- "bs58",
+ "bs58 0.4.0",
  "near-primitives-core",
  "near-sdk-macros",
  "near-vm-logic",
@@ -1778,7 +1787,7 @@ checksum = "e11cb28a2d07f37680efdaf860f4c9802828c44fc50c08009e7884de75d982c5"
 dependencies = [
  "base64",
  "borsh",
- "bs58",
+ "bs58 0.4.0",
  "byteorder",
  "near-primitives-core",
  "near-runtime-utils",
@@ -2369,6 +2378,7 @@ dependencies = [
 name = "request_conversion_proxy"
 version = "0.1.0"
 dependencies = [
+ "bs58 0.5.0",
  "conversion_proxy",
  "fungible_conversion_proxy",
  "fungible_proxy",

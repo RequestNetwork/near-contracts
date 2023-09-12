@@ -4,6 +4,7 @@
 
 # testnet deployment and values (default)
 NEAR_ENV="testnet"
+# TODO
 oracle_account_id="fpo.opfilabs.testnet"
 provider_account_id="opfilabs.testnet"
 contract_name="conversion_proxy";
