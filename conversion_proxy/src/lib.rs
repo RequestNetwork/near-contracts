@@ -472,7 +472,7 @@ mod tests {
         let context = get_context(alice_account(), ntoy(1), 10u64.pow(14), false);
         testing_env!(context);
         let mut contract = ConversionProxy::default();
-        let (to, _amount, _fee_address, _fee_amount, _max_rate_timespan) = default_values();
+        let (_to, _amount, _fee_address, _fee_amount, _max_rate_timespan) = default_values();
         contract.set_feed_address(bs58::decode("HeS3xrDqHA2CSHTmN9osstz8vbXfgh2mzzzzzzzzzzzz").into_vec().expect("WRONG TEST FEED ADDRESS FORMAT"));
     }
 
@@ -482,7 +482,7 @@ mod tests {
         let mut contract = ConversionProxy::default();
         let context = get_context(owner, ntoy(1), 10u64.pow(14), false);
         testing_env!(context);
-        let (to, _amount, _fee_address, _fee_amount, _max_rate_timespan) = default_values();
+        let (_to, _amount, _fee_address, _fee_amount, _max_rate_timespan) = default_values();
         contract.set_feed_address(bs58::decode("HeS3xrDqHA2CSHTmN9osstz8vbXfgh2mzzzzzzzzzzzz").into_vec().expect("WRONG TEST FEED ADDRESS FORMAT"));
     }
 
