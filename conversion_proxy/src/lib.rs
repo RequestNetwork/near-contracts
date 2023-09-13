@@ -293,11 +293,12 @@ impl ConversionProxy {
         if total_payment > env::attached_deposit() {
             
             Promise::new(payer.clone().to_string()).transfer(env::attached_deposit());
-            panic!(
+            log!(
                 "Deposit too small for payment (Supplied: {}. Demand (incl. fees): {})",
                 env::attached_deposit(),
                 total_payment
             );
+            return 0_u128;
         }
 
         let change = env::attached_deposit() - (total_payment);

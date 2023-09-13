@@ -1,6 +1,6 @@
 use crate::utils::*;
 use conversion_proxy::ConversionProxyContract;
-use mocks::fpo_oracle_mock::FPOContractContract;
+use mocks::switchboard_feed_parser_mock::SwitchboardFeedParserContract;
 use near_sdk::json_types::{U128, U64};
 use near_sdk::Balance;
 use near_sdk_sim::init_simulator;
@@ -34,8 +34,8 @@ fn init() -> (
     let root = init_simulator(Some(genesis));
 
     deploy!(
-        contract: FPOContractContract,
-        contract_id: "mockedfpo".to_string(),
+        contract: SwitchboardFeedParserContract,
+        contract_id: "mockedswitchboard".to_string(),
         bytes: &MOCKED_BYTES,
         signer_account: root,
         deposit: to_yocto("7")
@@ -52,16 +52,16 @@ fn init() -> (
         contract_id: PROXY_ID,
         bytes: &PROXY_BYTES,
         signer_account: root,
-        deposit: to_yocto("10"),
-        init_method: new("mockedfpo".into(), "any".into())
+        deposit: to_yocto("5"),
+        init_method: new("mockedswitchboard".into(), bs58::decode("testNEARtoUSD").into_vec().expect("WRONG VEC"))
     );
 
-    let get_oracle_result = call!(root, proxy.get_oracle_account());
-    get_oracle_result.assert_success();
+    let get_parser_result = call!(root, proxy.get_feed_parser());
+    get_parser_result.assert_success();
 
     debug_assert_eq!(
-        &get_oracle_result.unwrap_json_value(),
-        &"mockedfpo".to_string()
+        &get_parser_result.unwrap_json_value().to_owned(),
+        &"mockedswitchboard".to_string()
     );
 
     (account, empty_account_1, empty_account_2, proxy)
@@ -188,7 +188,51 @@ fn test_transfer_with_wrong_currency() {
         ),
         deposit = transfer_amount
     );
-    assert_one_promise_error(result, "ERR_INVALID_ORACLE_RESPONSE");
+    assert_one_promise_error(result, "Only payments denominated in USD are implemented for now");
+}
+
+#[test]
+fn test_transfer_with_low_deposit() {
+    let (alice, bob, builder, proxy) = init();
+    let initial_alice_balance = alice.account().unwrap().amount;
+    let initial_contract_balance = proxy.account().unwrap().amount;
+    let transfer_amount = to_yocto("1000");
+    let payment_address = bob.account_id().try_into().unwrap();
+    let fee_address = builder.account_id().try_into().unwrap();
+
+    let result = call!(
+        alice,
+        proxy.transfer_with_reference(
+            "0x1122334455667788".to_string(),
+            payment_address,
+            U128::from(2000000),
+            String::from("USD"),
+            fee_address,
+            U128::from(0),
+            U64::from(0)
+        ),
+        deposit = transfer_amount
+    );
+    result.assert_success();
+    assert_eq!(result.logs().len(), 1, "Wrong number of logs");
+    assert!(result.logs()[0].contains("Deposit too small for payment"));
+
+    let alice_balance = alice.account().unwrap().amount;
+    assert!(alice_balance < initial_alice_balance);
+    let spent_amount = initial_alice_balance - alice_balance;
+    assert!(
+        spent_amount < to_yocto("0.005"),
+        "Alice should not spend NEAR on a 0 USD payment",
+    );
+
+    assert!(
+        proxy.account().unwrap().amount / to_yocto("1") == initial_contract_balance / to_yocto("1"),
+        "Contract's balance should be unchanged"
+    );
+    // assert!(
+    //     builder.account().unwrap().amount == initial_bob_balance,
+    //     "Builder's balance should be unchanged"
+    // );
 }
 
 #[test]

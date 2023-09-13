@@ -3,7 +3,6 @@ name = "conversion_proxy"
 version = "0.0.2"
 authors = ["Request Finance", "Request Network"]
 edition = "2018"
-overflow-checks=true
 
 [lib]
 crate-type = ["cdylib", "rlib"]

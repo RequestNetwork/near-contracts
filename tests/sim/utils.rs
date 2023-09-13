@@ -83,7 +83,7 @@ pub fn assert_one_promise_error(promise_result: ExecutionResult, expected_error_
         .outcome()
         .status
     {
-        assert!(execution_error.to_string().contains(expected_error_message));
+        assert!(execution_error.to_string().contains(expected_error_message), "Expected error containing: '{}'. Got: '{}'", expected_error_message, execution_error.to_string());
     } else {
         unreachable!();
     }
