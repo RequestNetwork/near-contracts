@@ -37,13 +37,13 @@ cargo test
 ## Integration tests
 
 ```
-# To test everything
+# To test everything (unit tests, sanity checks, simulated tests)
 ./test.sh
 
 # To test contracts one by one:
-cargo test conversion_proxy
-cargo test fungible_conversionproxy
-cargo test fungible_proxy
+cargo test -p conversion_proxy
+cargo test -p fungible_conversionproxy
+cargo test -p fungible_proxy
 
 # To run integration tests one by one (examples with main transfers):
 cargo test conversion_proxy::test_transfer -- --exact
