@@ -4,9 +4,8 @@
 
 # testnet deployment and values (default)
 NEAR_ENV="testnet"
-# TODO
-oracle_account_id="fpo.opfilabs.testnet"
-provider_account_id="opfilabs.testnet"
+feed_parser="switchboard-v2.testnet"
+feed_address=[251, 166, 196, 242, 159, 139, 89, 47, 230, 78, 243, 185, 185, 188, 150, 219, 165, 68, 131, 5, 216, 42, 120, 26, 26, 142, 133, 0, 111, 235, 63, 18]
 contract_name="conversion_proxy";
 patch=false;
 
@@ -68,7 +67,7 @@ else
   if ! $patch ; then
     initParams="
     --initFunction new  \
-    --initArgs '{"oracle_account_id": "'$oracle_account_id'", "provider_account_id": "'$provider_account_id'"}'";
+    --initArgs '{"feed_parser": "'$feed_parser'", "feed_address": "'$feed_address'"}'";
   fi
   set -x
   near deploy -f --wasmFile ./target/wasm32-unknown-unknown/release/$contract_name.wasm \
