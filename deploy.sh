@@ -21,14 +21,14 @@ while getopts "pha:-:" OPT; do
   fi
   case "$OPT" in
     h | help)
-      echo "Builds and deploys contracts, eventually with state initialization."
+      echo "Builds and deploys contracts, with or without state initialization."
       echo "Defaults to testnet."
       echo ""
       echo "Options:"
       echo "  -h | --help                 : shows this help"
       echo "  -p | --prod | --mainnet     : for prod deployment"
       echo "  -a [account_id]             : to override \$ACCOUNT_ID"
-      echo "  --patch                     : to patch an existing contract (skip the init function if any)"
+      echo "  --patch                     : to patch an existing contract (skip the init function, if any)"
       echo ""
       echo "  Choose the contract to deploy with:"
       echo "    --conversion_proxy [default]"
