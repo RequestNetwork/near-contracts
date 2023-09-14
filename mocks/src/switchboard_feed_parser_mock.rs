@@ -88,6 +88,8 @@ mod tests {
     }
     #[test]
     fn aggregator_read() {
+      let disp_vec = bs58::decode("E81iAUr7RPDUksAFtZxn7curbUVRy1Gps6sr6JnQALHx").into_vec().expect("!!").into_iter().map(|c| c.to_string()).collect::<Vec<String>>().join(",");
+        println!("RESULT: {}", disp_vec);
         let context = get_context("alice.near".to_string(), to_yocto("1"), 10u64.pow(14), true);
         testing_env!(context);
         let contract = SwitchboardFeedParser::default();
@@ -97,7 +99,6 @@ mod tests {
         }) {
           assert_eq!(result.result.mantissa, i128::from(1234000));
           assert_eq!(result.result.scale, 6);
-            // TODO
         } else {
             panic!("NEAR/USD mock returned None")
         }
@@ -105,6 +106,8 @@ mod tests {
     #[test]
     #[should_panic(expected = r#"InvalidAggregator"#)]
     fn missing_aggregator_read() {
+      let disp_vec = bs58::decode("E81iAUr7RPDUksAFtZxn7curbUVRy1Gps6sr6JnQALHx").into_vec().expect("!!").into_iter().map(|c| c.to_string()).collect::<Vec<String>>().join(",");
+        println!("RESULT: {}", disp_vec);
         let context = get_context("alice.near".to_string(), to_yocto("1"), 10u64.pow(14), true);
         testing_env!(context);
         let contract = SwitchboardFeedParser::default();

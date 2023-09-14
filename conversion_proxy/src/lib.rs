@@ -28,9 +28,6 @@ pub struct SwitchboardDecimal {
 
 #[derive(BorshDeserialize, BorshSerialize, Serialize, Deserialize)]
 pub struct PriceEntry {
-    // pub price: U128,            // Last reported price
-    // pub decimals: u16,          // Amount of decimals (e.g. if 2, 100 = 1.00)
-    // pub last_update: Timestamp, // Time of report
     pub result: SwitchboardDecimal,
     pub num_success: u32,
     pub num_error: u32,
@@ -39,12 +36,11 @@ pub struct PriceEntry {
 
 #[derive(BorshDeserialize, BorshSerialize, Serialize, Deserialize)]
 pub struct SwitchboarIx {
-    pub address: Vec<u8>,
+    pub address: Vec<u8>,   // This feed address reference a specific price feed, see https://app.switchboard.xyz
     pub payer: Vec<u8>,
 }
 
-
-// Interface of the Switchboard price oracle
+// Interface of the Switchboard feed parser
 #[near_sdk::ext_contract(sb_contract)]
 trait Switchboard {
     fn aggregator_read(ix: SwitchboarIx) -> Promise<PriceEntry>;
@@ -53,8 +49,9 @@ trait Switchboard {
 
 ///
 /// This contract
-/// - oracle_account_id: should be a valid FPO oracle account ID
-/// - provider_account_id: should be a valid FPO provider account ID
+/// - feed_parser: should be a valid Switchboard feed parser
+/// - feed_address: should be a valid NEAR/USD price feed
+/// - feed_payer: pays for feeds not sponsored by Switchboard
 /// - owner_id: only the owner can edit the contract state values above (default = deployer)
 #[near_bindgen]
 #[derive(Default, BorshDeserialize, BorshSerialize)]
@@ -105,7 +102,7 @@ impl ConversionProxy {
     /// - `payment_reference`: used for indexing and matching the payment with a request
     /// - `payment_address`: `amount` in `currency` of NEAR will be paid to this address
     /// - `amount`: in `currency` with 2 decimals (eg. 1000 is 10.00)
-    /// - `currency`: ticker, most likely fiat (eg. 'USD')
+    /// - `currency`: ticker, only "USD" implemented for now
     /// - `fee_payment_address`: `fee_amount` in `currency` of NEAR will be paid to this address
     /// - `fee_amount`: in `currency`
     /// - `max_rate_timespan`: in nanoseconds, the maximum validity for the oracle rate response (or 0 if none)
@@ -126,11 +123,11 @@ impl ConversionProxy {
             env::prepaid_gas(),
             MIN_GAS
         );
+        assert_eq!(currency, "USD", "Only payments denominated in USD are implemented for now");
 
         let reference_vec: Vec<u8> = hex::decode(payment_reference.replace("0x", ""))
             .expect("Payment reference value error");
         assert_eq!(reference_vec.len(), 8, "Incorrect payment reference length");
-        assert_eq!(currency, "USD", "Only payments denominated in USD are implemented for now");
 
         let get_rate = sb_contract::aggregator_read(SwitchboarIx {address: self.feed_address.clone(), payer: self.feed_payer.clone()},
             &self.feed_parser,
@@ -156,7 +153,7 @@ impl ConversionProxy {
     #[init]
     pub fn new(feed_parser: AccountId, feed_address: Vec<u8>) -> Self {
         let owner_id = env::signer_account_id();
-        let feed_payer = bs58::decode(owner_id.clone()).into_vec().expect("Could not decode owner");
+        let feed_payer = env::signer_account_pk();
         Self {
             feed_parser,
             feed_address,
@@ -178,19 +175,23 @@ impl ConversionProxy {
         return self.feed_parser.clone();
     }
 
-    pub fn set_feed_address(&mut self, oracle: Vec<u8>) {
+    pub fn set_feed_address(&mut self, feed_address: String) {
         let signer_id = env::predecessor_account_id();
         if self.owner_id == signer_id {
-            self.feed_address = oracle;
+            self.feed_address = bs58::decode(feed_address).into_vec().expect("Wrong feed address format");
         } else {
             panic!("ERR_PERMISSION");
         }
     }
-
+    
     pub fn get_feed_address(&self) -> Vec<u8> {
         return self.feed_address.clone();
     }
 
+    pub fn get_encoded_feed_address(&self) -> String {
+        return bs58::encode(self.feed_address.clone()).into_string();
+    }
+    
     pub fn set_owner(&mut self, owner: ValidAccountId) {
         let signer_id = env::predecessor_account_id();
         if self.owner_id == signer_id {
@@ -198,6 +199,36 @@ impl ConversionProxy {
         } else {
             panic!("ERR_PERMISSION");
         }
+    }
+    pub fn set_feed_payer(&mut self) {
+        let signer_id = env::predecessor_account_id();
+        println!("signer_id: {}", signer_id);
+        if self.owner_id == signer_id {
+            let feed_payer = env::signer_account_pk();
+            let vec_length = feed_payer.len();
+            println!("feed_payer: {}, len: {}", feed_payer.clone().into_iter().map(|c| c.to_string()).collect::<Vec<String>>().join(","), vec_length);
+            if vec_length == 32 {
+                self.feed_payer = env::signer_account_pk();
+                return;
+            }
+            // For some reason the VM prepends a 0 in front of the 32-long vector
+            if vec_length > 32 {
+                log!("Trimming the feed_payer pk to fit length 32 from length {}", vec_length);
+                self.feed_payer = feed_payer[vec_length-32..].to_vec();
+                return
+            }
+            panic!("ERR_OWNER_PK_LENGTH");
+         } else {
+            panic!("ERR_PERMISSION");
+        }
+    }
+    
+    pub fn get_feed_payer(&self) -> Vec<u8> {
+        return self.feed_payer.clone();
+    }
+
+    pub fn get_encoded_feed_payer(&self) -> String {
+        return bs58::encode(self.feed_payer.clone()).into_string();
     }
 
     #[private]
@@ -356,7 +387,7 @@ mod tests {
         VMContext {
             current_account_id: predecessor_account_id.clone(),
             signer_account_id: predecessor_account_id.clone(),
-            signer_account_pk: vec![0, 1, 2],
+            signer_account_pk: vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31],
             predecessor_account_id,
             input: vec![],
             block_index: 1,
@@ -448,6 +479,26 @@ mod tests {
     }
 
     #[test]
+    #[should_panic(expected = r#"Only payments denominated in USD are implemented for now"#)]
+    fn transfer_with_wrong_currency() {
+        let context = get_context(alice_account(), ntoy(100), 10u64.pow(14), false);
+        testing_env!(context);
+        let mut contract = ConversionProxy::default();
+        let payment_reference = "0x11223344556677".to_string();
+        let currency = "HKD".to_string();
+        let (to, amount, fee_address, fee_amount, max_rate_timespan) = default_values();
+        contract.transfer_with_reference(
+            payment_reference,
+            to,
+            amount,
+            currency,
+            fee_address,
+            fee_amount,
+            max_rate_timespan,
+        );
+    }
+
+    #[test]
     fn transfer_with_reference() {
         let context = get_context(alice_account(), ntoy(1), 10u64.pow(14), false);
         testing_env!(context);
@@ -473,7 +524,7 @@ mod tests {
         testing_env!(context);
         let mut contract = ConversionProxy::default();
         let (_to, _amount, _fee_address, _fee_amount, _max_rate_timespan) = default_values();
-        contract.set_feed_address(bs58::decode("HeS3xrDqHA2CSHTmN9osstz8vbXfgh2mzzzzzzzzzzzz").into_vec().expect("WRONG TEST FEED ADDRESS FORMAT"));
+        contract.set_feed_address("HeS3xrDqHA2CSHTmN9osstz8vbXfgh2mzzzzzzzzzzzz".into());
     }
 
     #[test]
@@ -483,7 +534,27 @@ mod tests {
         let context = get_context(owner, ntoy(1), 10u64.pow(14), false);
         testing_env!(context);
         let (_to, _amount, _fee_address, _fee_amount, _max_rate_timespan) = default_values();
-        contract.set_feed_address(bs58::decode("HeS3xrDqHA2CSHTmN9osstz8vbXfgh2mzzzzzzzzzzzz").into_vec().expect("WRONG TEST FEED ADDRESS FORMAT"));
+        contract.set_feed_address("HeS3xrDqHA2CSHTmN9osstz8vbXfgh2mzzzzzzzzzzzz".into());
+    }
+
+    #[test]
+    #[should_panic(expected = r#"ERR_PERMISSION"#)]
+    fn admin_feed_payer_no_permission() {
+        let context = get_context(alice_account(), ntoy(1), 10u64.pow(14), false);
+        testing_env!(context);
+        let mut contract = ConversionProxy::default();
+        let (_to, _amount, _fee_address, _fee_amount, _max_rate_timespan) = default_values();
+        contract.set_feed_payer();
+    }
+
+    #[test]
+    fn admin_feed_payer() {
+        let owner = ConversionProxy::default().owner_id;
+        let mut contract = ConversionProxy::default();
+        let context = get_context(owner, ntoy(1), 10u64.pow(14), false);
+        testing_env!(context);
+        let (_to, _amount, _fee_address, _fee_amount, _max_rate_timespan) = default_values();
+        contract.set_feed_payer();
     }
 
     #[test]
