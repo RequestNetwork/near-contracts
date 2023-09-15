@@ -15,10 +15,10 @@ near_sdk::setup_alloc!();
 
 const PROXY_ID: &str = "conversion_proxy";
 lazy_static_include::lazy_static_include_bytes! {
-   PROXY_BYTES => "out/conversion_proxy.wasm"
+   PROXY_BYTES => "target/wasm32-unknown-unknown/debug/conversion_proxy.wasm"
 }
 lazy_static_include::lazy_static_include_bytes! {
-   MOCKED_BYTES => "out/mocks.wasm"
+   MOCKED_BYTES => "target/wasm32-unknown-unknown/debug/mocks.wasm"
 }
 
 const DEFAULT_BALANCE: &str = "400000";
@@ -60,7 +60,7 @@ fn init() -> (
     get_oracle_result.assert_success();
 
     debug_assert_eq!(
-        &get_oracle_result.unwrap_json_value().to_owned(),
+        &get_oracle_result.unwrap_json_value(),
         &"mockedfpo".to_string()
     );
 

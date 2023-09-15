@@ -3,17 +3,12 @@ use near_sdk::json_types::U128;
 use near_sdk_sim::transaction::ExecutionStatus;
 use near_sdk_sim::{lazy_static_include, to_yocto, ExecutionResult, ContractAccount, call, UserAccount};
 
-lazy_static_include::lazy_static_include_bytes! {
-   REQUEST_PROXY_BYTES => "./out/conversion_proxy.wasm"
-}
-
 pub fn assert_almost_eq_with_max_delta(left: u128, right: u128, max_delta: u128) {
     assert!(
         std::cmp::max(left, right) - std::cmp::min(left, right) <= max_delta,
         "{}",
         format!(
-            "Left {} is not even close to Right {} within delta {}",
-            left, right, max_delta
+            "Left {left} is not even close to Right {right} within delta {max_delta}"
         )
     );
 }

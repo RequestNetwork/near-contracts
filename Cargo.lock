@@ -950,26 +950,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2022715d62ab30faffd124d40b76f4134a550a87792276512b18d63272333394"
 
 [[package]]
-name = "fungible_conversion_proxy"
-version = "0.0.1"
-dependencies = [
- "hex",
- "near-sdk",
- "near-sdk-sim",
- "serde",
-]
-
-[[package]]
-name = "fungible_proxy"
-version = "0.0.1"
-dependencies = [
- "hex",
- "near-sdk",
- "near-sdk-sim",
- "serde",
-]
-
-[[package]]
 name = "funty"
 version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2370,8 +2350,6 @@ name = "request_conversion_proxy"
 version = "0.1.0"
 dependencies = [
  "conversion_proxy",
- "fungible_conversion_proxy",
- "fungible_proxy",
  "hex",
  "mocks",
  "near-sdk",
