@@ -4,6 +4,7 @@ on:
   push:
   pull_request:
     branches: [ "main" ]
+    types: [opened, synchronize]
   workflow_dispatch:
 
 env:
@@ -15,20 +16,27 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+    - name: Rust version
+      run: cargo --version
+    - name: Rust downgrade
+      run: rustup default 1.67.0
+    - name: Rust version
+      run: cargo --version
     - uses: actions/checkout@v3
     - name: Install wasm32-unknown-unknown target
       run: rustup target add wasm32-unknown-unknown
-    - name: Build and run conversion proxy unit tests
-      working-directory: ./conversion_proxy
+    - name: Build contracts and mocks
+      run: RUSTFLAGS='-C link-arg=-s' cargo build --all --target wasm32-unknown-unknown
+    - name: Integration tests
       run: cargo test
-    - name: Build and run fungible proxy unit tests
-      working-directory: ./fungible_proxy
-      run: cargo test
-    - name: Build and run fungible conversion proxy unit tests
-      working-directory: ./fungible_conversion_proxy
-      run: cargo test
-    - name: Build and run mocks unit tests
-      working-directory: ./mocks
-      run: cargo test
-    - name: Run integration tests
-      run: ./test.sh
+    - name: Unit test - conversion proxy
+      run: cargo test -p conversion_proxy
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+    - name: Cargo format check
+      run: cargo fmt -- --check
+    - name: Cargo clippy
+      run: cargo clippy -- -D warnings
