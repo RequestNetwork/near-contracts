@@ -26,7 +26,7 @@ jobs:
       run: ./build.sh
     - name: Build mocks
       working-directory: ./mocks
-      run: cargo build
+      run: ./build.sh
     - name: Unit and Integration Tests
       run: cargo test --all
 
