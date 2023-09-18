@@ -1,9 +1,7 @@
 use mocks::fungible_token_mock::FungibleTokenContractContract;
 use near_sdk::json_types::U128;
 use near_sdk_sim::transaction::ExecutionStatus;
-use near_sdk_sim::{
-    call, to_yocto, ContractAccount, ExecutionResult, UserAccount,
-};
+use near_sdk_sim::{call, to_yocto, ContractAccount, ExecutionResult, UserAccount};
 
 pub fn assert_almost_eq_with_max_delta(left: u128, right: u128, max_delta: u128) {
     assert!(

@@ -1,4 +1,4 @@
-name: build and test
+name: main
 
 on:
   push:
@@ -14,10 +14,8 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  build:
-
+  build and test:
     runs-on: ubuntu-latest
-
     steps:
     - name: Rust downgrade
       run: rustup default 1.67.0
@@ -25,19 +23,12 @@ jobs:
     - name: Install wasm32-unknown-unknown target
       run: rustup target add wasm32-unknown-unknown
     - name: Build contracts
-      run: RUSTFLAGS='-C link-arg=-s' cargo build -p conversion_proxy -p fungible_proxy -p fungible_conversion_proxy --target wasm32-unknown-unknown --release
+      run: ./build.sh
     - name: Build mocks
-      run: RUSTFLAGS='-C link-arg=-s' cargo build --all --target wasm32-unknown-unknown
-    - name: Unit test -p conversion proxy
-      run: cargo test -p conversion_proxy
-    - name: Unit test - fungible proxy
-      run: cargo test -p fungible_proxy
-    - name: Unit test - fungible conversion proxy
-      run: cargo test -p fungible_conversion_proxy
-    - name: Integration tests - sanity checks
-      run: cargo test -p mocks
-    - name: Integration tests
-      run: cargo test
+      working-directory: ./mocks
+      run: cargo build
+    - name: Unit and Integration Tests
+      run: cargo test --all
 
   lint:
     runs-on: ubuntu-latest
