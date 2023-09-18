@@ -3,9 +3,7 @@ use near_sdk::json_types::{ValidAccountId, U128};
 use near_sdk::log;
 use near_sdk::serde::{Deserialize, Serialize};
 use near_sdk::serde_json::json;
-use near_sdk::{
-    env, near_bindgen, serde_json, AccountId, Balance, Gas, Promise
-};
+use near_sdk::{env, near_bindgen, serde_json, AccountId, Balance, Gas, Promise};
 near_sdk::setup_alloc!();
 
 const NO_DEPOSIT: Balance = 0;
@@ -119,7 +117,10 @@ impl FungibleProxy {
         let reference_vec: Vec<u8> = hex::decode(args.payment_reference.replace("0x", ""))
             .expect("Payment reference value error");
         assert_eq!(reference_vec.len(), 8, "Incorrect payment reference length");
-        assert!(args.fee_amount.0 <= amount.0, "amount smaller than fee_amount");
+        assert!(
+            args.fee_amount.0 <= amount.0,
+            "amount smaller than fee_amount"
+        );
         let main_amount = amount.0 - args.fee_amount.0;
         let main_transfer_args =
             json!({ "receiver_id": args.to.to_string(), "amount":main_amount.to_string(), "memo": None::<String> })
@@ -132,10 +133,9 @@ impl FungibleProxy {
             .into_bytes();
 
         // Some tokens revert when calling `ft_transfer` with 0
-        let payment_promise = 
-            if main_amount > 0 && args.fee_amount.0 > 0 {
-                // Main case: amount and fee
-                Promise::new(token_address.to_string())
+        let payment_promise = if main_amount > 0 && args.fee_amount.0 > 0 {
+            // Main case: amount and fee
+            Promise::new(token_address.to_string())
                 .function_call(
                     "ft_transfer".into(),
                     main_transfer_args,
@@ -148,40 +148,36 @@ impl FungibleProxy {
                     YOCTO_DEPOSIT,
                     BASIC_GAS * 2,
                 )
-            } else if main_amount > 0 {
-                // No fee
-                Promise::new(token_address.to_string())
-                .function_call(
-                    "ft_transfer".into(),
-                    main_transfer_args,
-                    YOCTO_DEPOSIT,
-                    BASIC_GAS * 2,
-                )
-            } else if args.fee_amount.0 > 0 {
-                // Only fee payment
-                Promise::new(token_address.to_string())
-                .function_call(
-                    "ft_transfer".into(),
-                    fee_transfer_args,
-                    YOCTO_DEPOSIT,
-                    BASIC_GAS * 2,
-                )
-            } else {
-                // No payment
-                Promise::new(token_address.to_string())
-            };
-
-        payment_promise
-            .then(ext_self::on_transfer_with_reference(
-                args,
-                token_address,
-                payer,
-                main_amount.into(),
-                &env::current_account_id(),
-                NO_DEPOSIT,
-                BASIC_GAS,
+        } else if main_amount > 0 {
+            // No fee
+            Promise::new(token_address.to_string()).function_call(
+                "ft_transfer".into(),
+                main_transfer_args,
+                YOCTO_DEPOSIT,
+                BASIC_GAS * 2,
             )
-        )
+        } else if args.fee_amount.0 > 0 {
+            // Only fee payment
+            Promise::new(token_address.to_string()).function_call(
+                "ft_transfer".into(),
+                fee_transfer_args,
+                YOCTO_DEPOSIT,
+                BASIC_GAS * 2,
+            )
+        } else {
+            // No payment
+            Promise::new(token_address.to_string())
+        };
+
+        payment_promise.then(ext_self::on_transfer_with_reference(
+            args,
+            token_address,
+            payer,
+            main_amount.into(),
+            &env::current_account_id(),
+            NO_DEPOSIT,
+            BASIC_GAS,
+        ))
     }
 
     #[private]
@@ -208,9 +204,16 @@ impl FungibleProxy {
             );
             0.to_string()
         } else {
-             // return full amount for `ft_resolve_transfer` on the token contract
+            // return full amount for `ft_resolve_transfer` on the token contract
             let change = (amount.0 + args.fee_amount.0).to_string();
-            log!("Transfer failed to {} or {}. Returning attached amount of {} of token {} to {}", args.to, args.fee_address, change, token_address, payer);
+            log!(
+                "Transfer failed to {} or {}. Returning attached amount of {} of token {} to {}",
+                args.to,
+                args.fee_address,
+                change,
+                token_address,
+                payer
+            );
             change
         }
     }

@@ -2,7 +2,7 @@ use crate::utils::*;
 use fungible_conversion_proxy::FungibleConversionProxyContract;
 use mocks::fpo_oracle_mock::FPOContractContract;
 use mocks::fungible_token_mock::FungibleTokenContractContract;
-use near_sdk::json_types::{U128};
+use near_sdk::json_types::U128;
 use near_sdk_sim::init_simulator;
 use near_sdk_sim::runtime::GenesisConfig;
 use near_sdk_sim::ContractAccount;
@@ -15,7 +15,7 @@ near_sdk::setup_alloc!();
 
 const PROXY_ID: &str = "fungible_conversion_proxy";
 lazy_static_include::lazy_static_include_bytes! {
-   PROXY_BYTES => "out/fungible_conversion_proxy.wasm"
+   PROXY_BYTES => "target/wasm32-unknown-unknown/release/fungible_conversion_proxy.wasm"
 }
 lazy_static_include::lazy_static_include_bytes! {
     MOCKED_BYTES => "target/wasm32-unknown-unknown/debug/mocks.wasm"
@@ -92,10 +92,7 @@ fn fungible_transfer_setup(
     call!(alice, ft_contract.register_account(alice.account_id()));
     call!(bob, ft_contract.register_account(bob.account_id()));
     call!(builder, ft_contract.register_account(builder.account_id()));
-    call!(
-        builder,
-        ft_contract.register_account(PROXY_ID.into())
-    );
+    call!(builder, ft_contract.register_account(PROXY_ID.into()));
 
     // Set initial balances
     call!(
@@ -127,10 +124,7 @@ fn fungible_transfer_setup(
 
     // In real usage, the user calls `ft_transfer_call` on the token contract, which calls `ft_on_transfer` on our contract
     // The token contract will transfer the specificed tokens from the caller to our contract before calling our contract
-    call!(
-        alice,
-        ft_contract.set_balance(PROXY_ID.into(), send_amt)
-    );
+    call!(alice, ft_contract.set_balance(PROXY_ID.into(), send_amt));
     call!(
         alice,
         ft_contract.set_balance(

@@ -60,7 +60,7 @@ printf "Deploying %s on NEAR_ENV=%s with ACCOUNT_ID=%s (patch=%s)\n\n" "$contrac
 
 if [ "$contract_name" = "fungible_proxy" ]; then
   set -x
-  near deploy -f --wasmFile ./out/$contract_name.wasm \
+  near deploy -f --wasmFile ./target/wasm32-unknown-unknown/release/$contract_name.wasm \
    --accountId $ACCOUNT_ID
 else
   initParams="";
@@ -70,7 +70,7 @@ else
     --initArgs '{"oracle_account_id": "'$oracle_account_id'", "provider_account_id": "'$provider_account_id'"}'";
   fi
   set -x
-  near deploy -f --wasmFile ./out/$contract_name.wasm \
+  near deploy -f --wasmFile ./target/wasm32-unknown-unknown/release/$contract_name.wasm \
     --accountId $ACCOUNT_ID \
     $initParams
 fi

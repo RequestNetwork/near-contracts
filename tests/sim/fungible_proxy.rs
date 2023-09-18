@@ -1,8 +1,8 @@
 use crate::utils::*;
-use fungible_proxy::PaymentArgs;
 use fungible_proxy::FungibleProxyContract;
+use fungible_proxy::PaymentArgs;
 use mocks::fungible_token_mock::FungibleTokenContractContract;
-use near_sdk::json_types::{U128};
+use near_sdk::json_types::U128;
 use near_sdk::serde_json::json;
 use near_sdk_sim::init_simulator;
 use near_sdk_sim::runtime::GenesisConfig;
@@ -17,7 +17,7 @@ near_sdk::setup_alloc!();
 
 const PROXY_ID: &str = "fungible_proxy";
 lazy_static_include::lazy_static_include_bytes! {
-   PROXY_BYTES => "out/fungible_proxy.wasm"
+   PROXY_BYTES => "target/wasm32-unknown-unknown/release/fungible_proxy.wasm"
 }
 lazy_static_include::lazy_static_include_bytes! {
     MOCKED_BYTES => "target/wasm32-unknown-unknown/debug/mocks.wasm"
@@ -77,10 +77,7 @@ fn fungible_transfer_setup(
     call!(alice, ft_contract.register_account(alice.account_id()));
     call!(bob, ft_contract.register_account(bob.account_id()));
     call!(builder, ft_contract.register_account(builder.account_id()));
-    call!(
-        builder,
-        ft_contract.register_account(PROXY_ID.into())
-    );
+    call!(builder, ft_contract.register_account(PROXY_ID.into()));
 
     // Set initial balances
     call!(
@@ -112,10 +109,7 @@ fn fungible_transfer_setup(
 
     // In real usage, the user calls `ft_transfer_call` on the token contract, which calls `ft_on_transfer` on our contract
     // The token contract will transfer the specificed tokens from the caller to our contract before calling our contract
-    call!(
-        alice,
-        ft_contract.set_balance(PROXY_ID.into(), send_amt)
-    );
+    call!(alice, ft_contract.set_balance(PROXY_ID.into(), send_amt));
     call!(
         alice,
         ft_contract.set_balance(
@@ -170,7 +164,6 @@ fn test_transfer() {
     assert_spent(alice, alice_balance_before, send_amt.into(), &ft_contract);
     assert_received(bob, bob_balance_before, 498000000, &ft_contract);
     assert_received(builder, builder_balance_before, 2000000, &ft_contract);
-
 }
 
 #[test]
@@ -207,10 +200,10 @@ fn test_transfer_receiver_send_failed() {
     call!(bob, ft_contract.unregister_account(bob.account_id()));
 
     let args = PaymentArgs {
-            fee_address: builder.account_id().try_into().unwrap(),
-            fee_amount: 2000000.into(), // 2 USDC.e
-            payment_reference: "abc7c8bb1234fd12".into(),
-            to: bob.account_id().try_into().unwrap()
+        fee_address: builder.account_id().try_into().unwrap(),
+        fee_amount: 2000000.into(), // 2 USDC.e
+        payment_reference: "abc7c8bb1234fd12".into(),
+        to: bob.account_id().try_into().unwrap(),
     };
 
     let result = call!(
@@ -224,11 +217,8 @@ fn test_transfer_receiver_send_failed() {
     // The mocked fungible token does not handle change
     let change = result.unwrap_json::<String>().parse::<u128>().unwrap();
 
-     let result = call!(alice, ft_contract.ft_balance_of(alice.account_id()));
-     let alice_balance_after = result.unwrap_json::<U128>()
-        .0
-        + change;
-        
+    let result = call!(alice, ft_contract.ft_balance_of(alice.account_id()));
+    let alice_balance_after = result.unwrap_json::<U128>().0 + change;
 
     // Ensure no balance changes / all funds returned to sender
     assert!(alice_balance_after == alice_balance_before);
@@ -244,13 +234,16 @@ fn test_transfer_fee_receiver_send_failed() {
 
     // Previous line registers all accounts, so we unregister builder here
     // Fee_receiver is not registered with the token contract, so sending to it will fail
-    call!(builder, ft_contract.unregister_account(builder.account_id()));
+    call!(
+        builder,
+        ft_contract.unregister_account(builder.account_id())
+    );
 
     let args = PaymentArgs {
-            fee_address: "builder".try_into().unwrap(),
-            fee_amount: 200.into(),
-            payment_reference: "abc7c8bb1234fd12".into(),
-            to: bob.account_id().try_into().unwrap()
+        fee_address: "builder".try_into().unwrap(),
+        fee_amount: 200.into(),
+        payment_reference: "abc7c8bb1234fd12".into(),
+        to: bob.account_id().try_into().unwrap(),
     };
 
     let result = call!(
@@ -265,7 +258,12 @@ fn test_transfer_fee_receiver_send_failed() {
     let change = result.unwrap_json::<String>().parse::<u128>().unwrap();
     assert_eq!(change, 500000000);
 
-    assert_unchanged_balance(alice, alice_balance_before.sub(change), &ft_contract, "Alice");
+    assert_unchanged_balance(
+        alice,
+        alice_balance_before.sub(change),
+        &ft_contract,
+        "Alice",
+    );
 }
 
 #[test]
@@ -277,10 +275,10 @@ fn test_transfer_zero_usd() {
         fungible_transfer_setup(&alice, &bob, &builder, &ft_contract, send_amt);
 
     let args = PaymentArgs {
-            fee_address: "builder".try_into().unwrap(),
-            fee_amount: 0.into(),
-            payment_reference: "abc7c8bb1234fd12".into(),
-            to: bob.account_id().try_into().unwrap()
+        fee_address: "builder".try_into().unwrap(),
+        fee_amount: 0.into(),
+        payment_reference: "abc7c8bb1234fd12".into(),
+        to: bob.account_id().try_into().unwrap(),
     };
     let result = call!(
         ft_contract.user_account,
