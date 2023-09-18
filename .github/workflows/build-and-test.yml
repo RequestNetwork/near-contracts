@@ -4,6 +4,7 @@ on:
   push:
   pull_request:
     branches: [ "main" ]
+    types: [opened, synchronize]
   workflow_dispatch:
 
 env:
@@ -26,18 +27,6 @@ jobs:
       run: rustup target add wasm32-unknown-unknown
     - name: Build contracts and mocks
       run: RUSTFLAGS='-C link-arg=-s' cargo build --all --target wasm32-unknown-unknown
-
-  # test:
-    # runs-on: ubuntu-latest
-    # needs: build
-    # steps:
-    # - uses: actions/checkout@v3
-    # - name: Install wasm32-unknown-unknown target
-    #   run: rustup target add wasm32-unknown-unknown
-    # - name: fungible proxy unit tests
-    #   run: cargo test -p fungible_proxy
-    # - name: fungible conversion proxy unit tests
-    #   run: cargo test - fungible_conversion_proxy
     - name: Integration tests
       run: cargo test
     - name: Unit test - conversion proxy

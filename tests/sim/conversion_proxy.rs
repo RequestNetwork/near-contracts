@@ -52,7 +52,7 @@ fn init() -> (
         contract_id: PROXY_ID,
         bytes: &PROXY_BYTES,
         signer_account: root,
-        deposit: to_yocto("5"),
+        deposit: to_yocto("10"),
         init_method: new("mockedfpo".into(), "any".into())
     );
 
