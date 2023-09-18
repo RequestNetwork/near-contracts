@@ -18,7 +18,7 @@ lazy_static_include::lazy_static_include_bytes! {
    PROXY_BYTES => "out/fungible_conversion_proxy.wasm"
 }
 lazy_static_include::lazy_static_include_bytes! {
-   MOCKED_BYTES => "out/mocks.wasm"
+    MOCKED_BYTES => "target/wasm32-unknown-unknown/debug/mocks.wasm"
 }
 
 const DEFAULT_BALANCE: &str = "400000";
