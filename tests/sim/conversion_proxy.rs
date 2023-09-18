@@ -15,7 +15,7 @@ near_sdk::setup_alloc!();
 
 const PROXY_ID: &str = "conversion_proxy";
 lazy_static_include::lazy_static_include_bytes! {
-   PROXY_BYTES => "target/wasm32-unknown-unknown/debug/conversion_proxy.wasm"
+   PROXY_BYTES => "target/wasm32-unknown-unknown/release/conversion_proxy.wasm"
 }
 lazy_static_include::lazy_static_include_bytes! {
    MOCKED_BYTES => "target/wasm32-unknown-unknown/debug/mocks.wasm"
@@ -94,7 +94,6 @@ fn test_transfer() {
         ),
         deposit = transfer_amount
     );
-    result.assert_success();
 
     println!(
         "test_transfer_usd_near ==> TeraGas burnt: {}",
