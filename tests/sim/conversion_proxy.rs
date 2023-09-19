@@ -94,6 +94,7 @@ fn test_transfer() {
         ),
         deposit = transfer_amount
     );
+    result.assert_success();
 
     println!(
         "test_transfer_usd_near ==> TeraGas burnt: {}",
