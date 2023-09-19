@@ -47,7 +47,7 @@ fn init_fungible() -> (
         contract_id: "mockedft".to_string(),
         bytes: &MOCKED_BYTES,
         signer_account: root,
-        deposit: to_yocto("7")
+        deposit: to_yocto("8")
     );
 
     let account = root.create_user("alice".to_string(), to_yocto(DEFAULT_BALANCE));
