@@ -34,8 +34,7 @@ jobs:
     - name: Build contracts
       run: ./build.sh
     - name: Build mocks
-      working-directory: ./mocks
-      run: ./build.sh
+      run: ./mocks/build.sh
     - name: Unit and Integration Tests
       run: cargo test --all
 
