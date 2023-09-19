@@ -19,13 +19,22 @@ jobs:
     - name: Rust downgrade
       run: rustup default 1.67.0
     - uses: actions/checkout@v3
+    - uses: actions/cache@v3
+      id: cache
+      with:
+        path: |
+          ~/.cargo/bin/
+          ~/.cargo/registry/index/
+          ~/.cargo/registry/cache/
+          ~/.cargo/git/db/
+          target/
+        key: cargo-${{ hashFiles('**/Cargo.lock') }}
     - name: Install wasm32-unknown-unknown target
       run: rustup target add wasm32-unknown-unknown
     - name: Build contracts
       run: ./build.sh
     - name: Build mocks
-      working-directory: ./mocks
-      run: ./build.sh
+      run: ./mocks/build.sh
     - name: Unit and Integration Tests
       run: cargo test --all
 
