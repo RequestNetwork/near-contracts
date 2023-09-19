@@ -169,62 +169,6 @@ fn test_transfer_with_invalid_reference_length() {
 
 #[test]
 fn test_transfer_with_wrong_currency() {
-    let working_vec = bs58::encode([
-        252, 166, 196, 242, 159, 139, 89, 47, 230, 78, 243, 185, 185, 188, 150, 219, 165, 68, 131,
-        5, 216, 42, 120, 26, 26, 142, 133, 0, 111, 235, 63, 18,
-    ])
-    .into_string();
-    println!("WORKING VEC: {}", working_vec.clone());
-    let vec = bs58::decode(working_vec.clone()).into_vec().expect("!!");
-    let disp_vec = vec
-        .clone()
-        .into_iter()
-        .map(|c| c.to_string())
-        .collect::<Vec<String>>()
-        .join("','");
-    println!("RESULT WORKING VEC: ['{}']", disp_vec.clone());
-
-    let vec = bs58::decode("E81iAUr7RPDUksAFtZxn7curbUVRy1Gps6sr6JnQALHx")
-        .into_vec()
-        .expect("!!");
-    let disp_vec1 = vec
-        .clone()
-        .into_iter()
-        .map(|c| c.to_string())
-        .collect::<Vec<String>>()
-        .join("','");
-    // println!("RESULT feed-payer: [{}] {}", disp_vec.clone(), vec.len());
-
-    let vec = bs58::decode("7igqhpGQ8xPpyjQ4gMHhXRvtZcrKSGJkdKDJYBiPQgcb")
-        .into_vec()
-        .expect("!!");
-    let disp_vec2 = vec
-        .clone()
-        .into_iter()
-        .map(|c| c.to_string())
-        .collect::<Vec<String>>()
-        .join("','");
-    println!(
-        "RESULT \"feed-address\":['{}'],\"payer\":['{}']",
-        disp_vec2.clone(),
-        disp_vec1.clone()
-    );
-
-    let vec = &bs58::decode("7igqhpGQ8xPpyjQ4gMHhXRvtZcrKSGJkdKDJYBiPQgcb")
-        .into_vec()
-        .expect("!!")[1..];
-    let disp_vec2 = vec
-        .clone()
-        .into_iter()
-        .map(|c| c.to_string())
-        .collect::<Vec<String>>()
-        .join("','");
-    println!(
-        "SLICE \"feed-address\":['{}'],\"length\":['{}']",
-        disp_vec2.clone(),
-        vec.len()
-    );
-
     let (alice, bob, builder, proxy) = init();
     let transfer_amount = to_yocto("100");
     let payment_address = bob.account_id().try_into().unwrap();
@@ -244,7 +188,7 @@ fn test_transfer_with_wrong_currency() {
         ),
         deposit = transfer_amount
     );
-    assert_one_promise_error(result, &disp_vec);
+    assert_one_promise_error(result, "Only payments denominated in USD are implemented for now");
 }
 
 #[test]
