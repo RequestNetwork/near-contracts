@@ -3,7 +3,8 @@ use near_sdk::json_types::{ValidAccountId, U128, U64};
 use near_sdk::serde::{Deserialize, Serialize};
 use near_sdk::serde_json::json;
 use near_sdk::{
-    env, log, near_bindgen, serde_json, AccountId, Balance, Gas, Promise, PromiseResult, Timestamp,
+    bs58, env, log, near_bindgen, serde_json, AccountId, Balance, Gas, Promise, PromiseResult,
+    Timestamp,
 };
 
 near_sdk::setup_alloc!();
@@ -18,7 +19,6 @@ const BASIC_GAS: Gas = 10_000_000_000_000;
 /**
  * Switchboard oracle-related declarations
  */
-
 
 #[derive(BorshDeserialize, BorshSerialize, Serialize, Deserialize)]
 pub struct SwitchboardDecimal {
@@ -36,7 +36,7 @@ pub struct PriceEntry {
 
 #[derive(BorshDeserialize, BorshSerialize, Serialize, Deserialize)]
 pub struct SwitchboarIx {
-    pub address: Vec<u8>,   // This feed address reference a specific price feed, see https://app.switchboard.xyz
+    pub address: Vec<u8>, // This feed address reference a specific price feed, see https://app.switchboard.xyz
     pub payer: Vec<u8>,
 }
 
@@ -45,7 +45,6 @@ pub struct SwitchboarIx {
 trait Switchboard {
     fn aggregator_read(ix: SwitchboarIx) -> Promise<PriceEntry>;
 }
-
 
 ///
 /// This contract
@@ -58,7 +57,7 @@ trait Switchboard {
 pub struct ConversionProxy {
     pub feed_parser: AccountId,
     pub feed_address: Vec<u8>,
-    pub feed_payer:Vec<u8>,
+    pub feed_payer: Vec<u8>,
     pub owner_id: AccountId,
 }
 
@@ -123,16 +122,24 @@ impl ConversionProxy {
             env::prepaid_gas(),
             MIN_GAS
         );
-        assert_eq!(currency, "USD", "Only payments denominated in USD are implemented for now");
+        assert_eq!(
+            currency, "USD",
+            "Only payments denominated in USD are implemented for now"
+        );
 
         let reference_vec: Vec<u8> = hex::decode(payment_reference.replace("0x", ""))
             .expect("Payment reference value error");
         assert_eq!(reference_vec.len(), 8, "Incorrect payment reference length");
 
-        let get_rate = sb_contract::aggregator_read(SwitchboarIx {address: self.feed_address.clone(), payer: self.feed_payer.clone()},
+        let get_rate = sb_contract::aggregator_read(
+            SwitchboarIx {
+                address: self.feed_address.clone(),
+                payer: self.feed_payer.clone(),
+            },
             &self.feed_parser,
             NO_DEPOSIT,
-            BASIC_GAS,);
+            BASIC_GAS,
+        );
         let callback_gas = BASIC_GAS * 3;
         let process_request_payment = ext_self::rate_callback(
             to,
@@ -178,12 +185,14 @@ impl ConversionProxy {
     pub fn set_feed_address(&mut self, feed_address: String) {
         let signer_id = env::predecessor_account_id();
         if self.owner_id == signer_id {
-            self.feed_address = bs58::decode(feed_address).into_vec().expect("Wrong feed address format");
+            self.feed_address = bs58::decode(feed_address)
+                .into_vec()
+                .expect("Wrong feed address format");
         } else {
             panic!("ERR_PERMISSION");
         }
     }
-    
+
     pub fn get_feed_address(&self) -> Vec<u8> {
         return self.feed_address.clone();
     }
@@ -191,7 +200,7 @@ impl ConversionProxy {
     pub fn get_encoded_feed_address(&self) -> String {
         return bs58::encode(self.feed_address.clone()).into_string();
     }
-    
+
     pub fn set_owner(&mut self, owner: ValidAccountId) {
         let signer_id = env::predecessor_account_id();
         if self.owner_id == signer_id {
@@ -206,23 +215,35 @@ impl ConversionProxy {
         if self.owner_id == signer_id {
             let feed_payer = env::signer_account_pk();
             let vec_length = feed_payer.len();
-            println!("feed_payer: {}, len: {}", feed_payer.clone().into_iter().map(|c| c.to_string()).collect::<Vec<String>>().join(","), vec_length);
+            println!(
+                "feed_payer: {}, len: {}",
+                feed_payer
+                    .clone()
+                    .into_iter()
+                    .map(|c| c.to_string())
+                    .collect::<Vec<String>>()
+                    .join(","),
+                vec_length
+            );
             if vec_length == 32 {
                 self.feed_payer = env::signer_account_pk();
                 return;
             }
             // For some reason the VM prepends a 0 in front of the 32-long vector
             if vec_length > 32 {
-                log!("Trimming the feed_payer pk to fit length 32 from length {}", vec_length);
-                self.feed_payer = feed_payer[vec_length-32..].to_vec();
-                return
+                log!(
+                    "Trimming the feed_payer pk to fit length 32 from length {}",
+                    vec_length
+                );
+                self.feed_payer = feed_payer[vec_length - 32..].to_vec();
+                return;
             }
             panic!("ERR_OWNER_PK_LENGTH");
-         } else {
+        } else {
             panic!("ERR_PERMISSION");
         }
     }
-    
+
     pub fn get_feed_payer(&self) -> Vec<u8> {
         return self.feed_payer.clone();
     }
@@ -303,18 +324,27 @@ impl ConversionProxy {
             PromiseResult::Failed => panic!("ERR_FAILED_ORACLE_FETCH"),
         };
         // Check rate errors
-        assert!(rate.num_error == 0 && rate.num_success == 1, "Conversion errors: {}, successes: {}", rate.num_error, rate.num_success);
+        assert!(
+            rate.num_error == 0 && rate.num_success == 1,
+            "Conversion errors: {}, successes: {}",
+            rate.num_error,
+            rate.num_success
+        );
         // Check rate validity
         assert!(
             u64::from(max_rate_timespan) == 0
-                || rate.round_open_timestamp >= env::block_timestamp() - u64::from(max_rate_timespan),
+                || rate.round_open_timestamp
+                    >= env::block_timestamp() - u64::from(max_rate_timespan),
             "Conversion rate too old (Last updated: {})",
             rate.round_open_timestamp,
         );
-        let conversion_rate = 0_u128.checked_add_signed(rate.result.mantissa).expect("Negative conversion rate");
+        let conversion_rate = 0_u128
+            .checked_add_signed(rate.result.mantissa)
+            .expect("Negative conversion rate");
         let decimals = u32::from(rate.result.scale);
-        let main_payment =
-            (Balance::from(amount) * ONE_NEAR * 10u128.pow(decimals) / conversion_rate / ONE_FIAT) as u128;
+        let main_payment = (Balance::from(amount) * ONE_NEAR * 10u128.pow(decimals)
+            / conversion_rate
+            / ONE_FIAT) as u128;
         let fee_payment = Balance::from(fee_amount) * ONE_NEAR * 10u128.pow(decimals)
             / conversion_rate
             / ONE_FIAT;
@@ -322,7 +352,6 @@ impl ConversionProxy {
         let total_payment = main_payment + fee_payment;
         // Check deposit
         if total_payment > env::attached_deposit() {
-            
             Promise::new(payer.clone().to_string()).transfer(env::attached_deposit());
             log!(
                 "Deposit too small for payment (Supplied: {}. Demand (incl. fees): {})",
@@ -387,7 +416,10 @@ mod tests {
         VMContext {
             current_account_id: predecessor_account_id.clone(),
             signer_account_id: predecessor_account_id.clone(),
-            signer_account_pk: vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31],
+            signer_account_pk: vec![
+                0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22,
+                23, 24, 25, 26, 27, 28, 29, 30, 31,
+            ],
             predecessor_account_id,
             input: vec![],
             block_index: 1,

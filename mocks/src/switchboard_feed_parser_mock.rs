@@ -1,31 +1,30 @@
 use near_sdk::borsh::{self, BorshDeserialize, BorshSerialize};
 use near_sdk::serde::{Deserialize, Serialize};
-use near_sdk::{Timestamp, env, near_bindgen, bs58};
+use near_sdk::{bs58, env, near_bindgen, Timestamp};
 
 /**
  * Mocking the Switchboard feed parser contract for tests
  */
 
+#[derive(BorshDeserialize, BorshSerialize, Serialize, Deserialize)]
+pub struct SwitchboardDecimal {
+    pub mantissa: i128,
+    pub scale: u32,
+}
 
- #[derive(BorshDeserialize, BorshSerialize, Serialize, Deserialize)]
- pub struct SwitchboardDecimal {
-     pub mantissa: i128,
-     pub scale: u32,
- }
- 
- #[derive(BorshDeserialize, BorshSerialize, Serialize, Deserialize)]
- pub struct PriceEntry {
-     pub result: SwitchboardDecimal,
-     pub num_success: u32,
-     pub num_error: u32,
-     pub round_open_timestamp: Timestamp,
- }
+#[derive(BorshDeserialize, BorshSerialize, Serialize, Deserialize)]
+pub struct PriceEntry {
+    pub result: SwitchboardDecimal,
+    pub num_success: u32,
+    pub num_error: u32,
+    pub round_open_timestamp: Timestamp,
+}
 
- #[derive(BorshDeserialize, BorshSerialize, Serialize, Deserialize)]
- pub struct SwitchboarIx {
-     pub address: Vec<u8>,
-     pub payer: Vec<u8>,
- }
+#[derive(BorshDeserialize, BorshSerialize, Serialize, Deserialize)]
+pub struct SwitchboarIx {
+    pub address: Vec<u8>,
+    pub payer: Vec<u8>,
+}
 
 // For mocks: state of Switchboard feed parser
 #[near_bindgen]
@@ -36,20 +35,20 @@ pub struct SwitchboardFeedParser {}
 impl SwitchboardFeedParser {
     #[allow(unused_variables)]
     pub fn aggregator_read(&self, ix: SwitchboarIx) -> Option<PriceEntry> {
-      match &*bs58::encode(ix.address).into_string() {
-        "testNEARtoUSD" => Some(PriceEntry {
-          result: SwitchboardDecimal {
-            mantissa: i128::from(1234000),
-            scale: u8::from(6).into()
-          },
-          num_success: 1,
-          num_error: 0,
-          round_open_timestamp: env::block_timestamp() -10,
-        }),
-        _ => {
-          panic!("InvalidAggregator")
-        },
-      }
+        match &*bs58::encode(ix.address).into_string() {
+            "testNEARtoUSD" => Some(PriceEntry {
+                result: SwitchboardDecimal {
+                    mantissa: i128::from(1234000),
+                    scale: u8::from(6).into(),
+                },
+                num_success: 1,
+                num_error: 0,
+                round_open_timestamp: env::block_timestamp() - 10,
+            }),
+            _ => {
+                panic!("InvalidAggregator")
+            }
+        }
     }
 }
 
@@ -58,7 +57,7 @@ mod tests {
 
     use super::*;
     // use crate::switchboard_feed_parser_mock::SwitchboardFeedParser;
-    use near_sdk::{testing_env, Balance, Gas, MockedBlockchain, VMContext, AccountId};
+    use near_sdk::{testing_env, AccountId, Balance, Gas, MockedBlockchain, VMContext};
     use near_sdk_sim::to_yocto;
 
     fn get_context(
@@ -88,17 +87,23 @@ mod tests {
     }
     #[test]
     fn aggregator_read() {
-      let disp_vec = bs58::decode("E81iAUr7RPDUksAFtZxn7curbUVRy1Gps6sr6JnQALHx").into_vec().expect("!!").into_iter().map(|c| c.to_string()).collect::<Vec<String>>().join(",");
+        let disp_vec = bs58::decode("E81iAUr7RPDUksAFtZxn7curbUVRy1Gps6sr6JnQALHx")
+            .into_vec()
+            .expect("!!")
+            .into_iter()
+            .map(|c| c.to_string())
+            .collect::<Vec<String>>()
+            .join(",");
         println!("RESULT: {}", disp_vec);
         let context = get_context("alice.near".to_string(), to_yocto("1"), 10u64.pow(14), true);
         testing_env!(context);
         let contract = SwitchboardFeedParser::default();
         if let Some(result) = contract.aggregator_read(SwitchboarIx {
-          address: bs58::decode("testNEARtoUSD").into_vec().expect("WRONG VEC"),
-          payer: bs58::decode("anynearpayer").into_vec().expect("WRONG VEC")
+            address: bs58::decode("testNEARtoUSD").into_vec().expect("WRONG VEC"),
+            payer: bs58::decode("anynearpayer").into_vec().expect("WRONG VEC"),
         }) {
-          assert_eq!(result.result.mantissa, i128::from(1234000));
-          assert_eq!(result.result.scale, 6);
+            assert_eq!(result.result.mantissa, i128::from(1234000));
+            assert_eq!(result.result.scale, 6);
         } else {
             panic!("NEAR/USD mock returned None")
         }
@@ -106,14 +111,22 @@ mod tests {
     #[test]
     #[should_panic(expected = r#"InvalidAggregator"#)]
     fn missing_aggregator_read() {
-      let disp_vec = bs58::decode("E81iAUr7RPDUksAFtZxn7curbUVRy1Gps6sr6JnQALHx").into_vec().expect("!!").into_iter().map(|c| c.to_string()).collect::<Vec<String>>().join(",");
+        let disp_vec = bs58::decode("E81iAUr7RPDUksAFtZxn7curbUVRy1Gps6sr6JnQALHx")
+            .into_vec()
+            .expect("!!")
+            .into_iter()
+            .map(|c| c.to_string())
+            .collect::<Vec<String>>()
+            .join(",");
         println!("RESULT: {}", disp_vec);
         let context = get_context("alice.near".to_string(), to_yocto("1"), 10u64.pow(14), true);
         testing_env!(context);
         let contract = SwitchboardFeedParser::default();
         contract.aggregator_read(SwitchboarIx {
-          address: bs58::decode("wrongAggregator").into_vec().expect("WRONG VEC"),
-          payer: bs58::decode("anynearpayer").into_vec().expect("WRONG VEC")
+            address: bs58::decode("wrongAggregator")
+                .into_vec()
+                .expect("WRONG VEC"),
+            payer: bs58::decode("anynearpayer").into_vec().expect("WRONG VEC"),
         });
     }
 }

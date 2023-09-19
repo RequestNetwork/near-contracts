@@ -24,14 +24,9 @@ Smart contracts on NEAR used by the
 Run all contracts unit tests like this:
 
 ```
-cd near-contracts/conversion_proxy
-cargo test
-cd near-contracts/fungible_conversion_proxy
-cargo test
-cd near-contracts/fungible_proxy
-cargo test
-cd near-contracts/mocks
-cargo test
+cargo test -p conversion_proxy
+cargo test -p fungible_conversion_proxy
+cargo test -p fungible_proxy
 ```
 
 ## Integration tests
