@@ -1,34 +1,39 @@
-name: build and test
+name: main
 
 on:
   push:
+    branches:
+      - "main" 
   pull_request:
-    branches: [ "main" ]
+    branches:
+      - "main"
   workflow_dispatch:
 
 env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  build:
-
+  build-and-test:
     runs-on: ubuntu-latest
-
     steps:
+    - name: Rust downgrade
+      run: rustup default 1.67.0
     - uses: actions/checkout@v3
     - name: Install wasm32-unknown-unknown target
       run: rustup target add wasm32-unknown-unknown
-    - name: Build and run conversion proxy unit tests
-      working-directory: ./conversion_proxy
-      run: cargo test
-    - name: Build and run fungible proxy unit tests
-      working-directory: ./fungible_proxy
-      run: cargo test
-    - name: Build and run fungible conversion proxy unit tests
-      working-directory: ./fungible_conversion_proxy
-      run: cargo test
-    - name: Build and run mocks unit tests
+    - name: Build contracts
+      run: ./build.sh
+    - name: Build mocks
       working-directory: ./mocks
-      run: cargo test
-    - name: Run integration tests
-      run: ./test.sh
+      run: ./build.sh
+    - name: Unit and Integration Tests
+      run: cargo test --all
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+    - name: Cargo format check
+      run: cargo fmt -- --check
+    - name: Cargo clippy
+      run: cargo clippy -- -D warnings
