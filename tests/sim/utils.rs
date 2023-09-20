@@ -74,7 +74,16 @@ pub fn assert_received(
 }
 
 pub fn assert_one_promise_error(promise_result: ExecutionResult, expected_error_message: &str) {
-    assert_eq!(promise_result.promise_errors().len(), 1);
+    assert!(
+        !promise_result.is_ok(),
+        "Promise succeeded, expected to fail."
+    );
+    assert_eq!(
+        promise_result.promise_errors().len(),
+        1,
+        "Expected 1 error, got {}",
+        promise_result.promise_errors().len()
+    );
 
     if let ExecutionStatus::Failure(execution_error) = &promise_result
         .promise_errors()

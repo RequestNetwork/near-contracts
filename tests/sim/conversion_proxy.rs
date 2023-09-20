@@ -23,12 +23,13 @@ lazy_static_include::lazy_static_include_bytes! {
 
 const DEFAULT_BALANCE: &str = "400000";
 
-// Initialize test environment with 3 accounts (alice, bob, builder) and a conversion mock.
+// Initialize test environment with 3 accounts (alice, bob, builder), a conversion mock, and its owner account.
 fn init() -> (
     UserAccount,
     UserAccount,
     UserAccount,
     ContractAccount<ConversionProxyContract>,
+    UserAccount,
 ) {
     let genesis = GenesisConfig::default();
     let root = init_simulator(Some(genesis));
@@ -56,6 +57,8 @@ fn init() -> (
         init_method: new("mockedswitchboard".into(), bs58::decode("testNEARtoUSD").into_vec().expect("WRONG VEC"))
     );
 
+    let set_feed_payer_result = call!(root, proxy.set_feed_payer());
+    set_feed_payer_result.assert_success();
     let get_parser_result = call!(root, proxy.get_feed_parser());
     get_parser_result.assert_success();
 
@@ -64,12 +67,12 @@ fn init() -> (
         &"mockedswitchboard".to_string()
     );
 
-    (account, empty_account_1, empty_account_2, proxy)
+    (account, empty_account_1, empty_account_2, proxy, root)
 }
 
 #[test]
 fn test_transfer() {
-    let (alice, bob, builder, proxy) = init();
+    let (alice, bob, builder, proxy, _) = init();
     let initial_alice_balance = alice.account().unwrap().amount;
     let initial_bob_balance = bob.account().unwrap().amount;
     let initial_builder_balance = builder.account().unwrap().amount;
@@ -135,7 +138,7 @@ fn test_transfer() {
 fn test_transfer_with_invalid_reference_length() {
     let transfer_amount = to_yocto("500");
 
-    let (alice, bob, builder, proxy) = init();
+    let (alice, bob, builder, proxy, _) = init();
     let payment_address = bob.account_id().try_into().unwrap();
     let fee_address = builder.account_id().try_into().unwrap();
 
@@ -153,15 +156,12 @@ fn test_transfer_with_invalid_reference_length() {
         ),
         deposit = transfer_amount
     );
-    // No successful outcome is expected
-    assert!(!result.is_ok());
+    assert_one_promise_error(result.clone(), "Incorrect payment reference length");
 
     println!(
         "test_transfer_with_invalid_parameter_length > TeraGas burnt: {}",
         result.gas_burnt() as f64 / 1e12
     );
-
-    assert_one_promise_error(result, "Incorrect payment reference length");
 
     // Check Alice balance
     assert_eq_with_gas(to_yocto(DEFAULT_BALANCE), alice.account().unwrap().amount);
@@ -169,7 +169,7 @@ fn test_transfer_with_invalid_reference_length() {
 
 #[test]
 fn test_transfer_with_wrong_currency() {
-    let (alice, bob, builder, proxy) = init();
+    let (alice, bob, builder, proxy, _) = init();
     let transfer_amount = to_yocto("100");
     let payment_address = bob.account_id().try_into().unwrap();
     let fee_address = builder.account_id().try_into().unwrap();
@@ -188,12 +188,15 @@ fn test_transfer_with_wrong_currency() {
         ),
         deposit = transfer_amount
     );
-    assert_one_promise_error(result, "Only payments denominated in USD are implemented for now");
+    assert_one_promise_error(
+        result,
+        "Only payments denominated in USD are implemented for now",
+    );
 }
 
 #[test]
 fn test_transfer_with_low_deposit() {
-    let (alice, bob, builder, proxy) = init();
+    let (alice, bob, builder, proxy, _) = init();
     let initial_alice_balance = alice.account().unwrap().amount;
     let initial_contract_balance = proxy.account().unwrap().amount;
     let transfer_amount = to_yocto("1000");
@@ -237,7 +240,7 @@ fn test_transfer_with_low_deposit() {
 
 #[test]
 fn test_transfer_zero_usd() {
-    let (alice, bob, builder, proxy) = init();
+    let (alice, bob, builder, proxy, _) = init();
     let initial_alice_balance = alice.account().unwrap().amount;
     let initial_bob_balance = bob.account().unwrap().amount;
     let transfer_amount = to_yocto("100");
@@ -279,7 +282,7 @@ fn test_transfer_zero_usd() {
 
 #[test]
 fn test_outdated_rate() {
-    let (alice, bob, builder, proxy) = init();
+    let (alice, bob, builder, proxy, _) = init();
     let transfer_amount = to_yocto("100");
     let payment_address = bob.account_id().try_into().unwrap();
     let fee_address = builder.account_id().try_into().unwrap();

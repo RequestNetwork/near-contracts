@@ -211,31 +211,16 @@ impl ConversionProxy {
     }
     pub fn set_feed_payer(&mut self) {
         let signer_id = env::predecessor_account_id();
-        println!("signer_id: {}", signer_id);
         if self.owner_id == signer_id {
             let feed_payer = env::signer_account_pk();
             let vec_length = feed_payer.len();
-            println!(
-                "feed_payer: {}, len: {}",
-                feed_payer
-                    .clone()
-                    .into_iter()
-                    .map(|c| c.to_string())
-                    .collect::<Vec<String>>()
-                    .join(","),
-                vec_length
-            );
             if vec_length == 32 {
                 self.feed_payer = env::signer_account_pk();
                 return;
             }
-            // For some reason the VM prepends a 0 in front of the 32-long vector
-            if vec_length > 32 {
-                log!(
-                    "Trimming the feed_payer pk to fit length 32 from length {}",
-                    vec_length
-                );
-                self.feed_payer = feed_payer[vec_length - 32..].to_vec();
+            // For some reason, the VM sometimes prepends a 0 in front of the 32-long vector
+            if vec_length == 33 && feed_payer[0] == 0_u8 {
+                self.feed_payer = feed_payer[1..].to_vec();
                 return;
             }
             panic!("ERR_OWNER_PK_LENGTH");
@@ -450,20 +435,27 @@ mod tests {
         )
     }
 
+    pub(crate) const CURRENCY_USD: &str = "USD";
+    pub(crate) const PAYMENT_REF: &str = "0x1122334455667788";
+    pub(crate) const FEED_ADDRESS: &str = "HeS3xrDqHA2CSHTmN9osstz8vbXfgh2mzzzzzzzzzzzz";
+
     #[test]
     #[should_panic(expected = r#"Incorrect payment reference length"#)]
     fn transfer_with_invalid_reference_length() {
-        let context = get_context(alice_account(), ntoy(100), 10u64.pow(14), false);
-        testing_env!(context);
+        testing_env!(get_context(
+            alice_account(),
+            ntoy(100),
+            10u64.pow(14),
+            false
+        ));
         let mut contract = ConversionProxy::default();
         let payment_reference = "0x11223344556677".to_string();
-        let currency = "USD".to_string();
         let (to, amount, fee_address, fee_amount, max_rate_timespan) = default_values();
         contract.transfer_with_reference(
             payment_reference,
             to,
             amount,
-            currency,
+            CURRENCY_USD.into(),
             fee_address,
             fee_amount,
             max_rate_timespan,
@@ -473,14 +465,40 @@ mod tests {
     #[test]
     #[should_panic(expected = r#"Payment reference value error"#)]
     fn transfer_with_invalid_reference_value() {
-        let context = get_context(alice_account(), ntoy(100), 10u64.pow(14), false);
-        testing_env!(context);
+        testing_env!(get_context(
+            alice_account(),
+            ntoy(100),
+            10u64.pow(14),
+            false
+        ));
         let mut contract = ConversionProxy::default();
         let payment_reference = "0x123".to_string();
-        let currency = "USD".to_string();
         let (to, amount, fee_address, fee_amount, max_rate_timespan) = default_values();
         contract.transfer_with_reference(
             payment_reference,
+            to,
+            amount,
+            CURRENCY_USD.into(),
+            fee_address,
+            fee_amount,
+            max_rate_timespan,
+        );
+    }
+
+    #[test]
+    #[should_panic(expected = r#"Only payments denominated in USD are implemented for now"#)]
+    fn transfer_with_invalid_currency() {
+        testing_env!(get_context(
+            alice_account(),
+            ntoy(100),
+            10u64.pow(14),
+            false
+        ));
+        let mut contract = ConversionProxy::default();
+        let currency = "HKD".to_string();
+        let (to, amount, fee_address, fee_amount, max_rate_timespan) = default_values();
+        contract.transfer_with_reference(
+            PAYMENT_REF.into(),
             to,
             amount,
             currency,
@@ -496,34 +514,12 @@ mod tests {
         let context = get_context(alice_account(), ntoy(1), 10u64.pow(13), false);
         testing_env!(context);
         let mut contract = ConversionProxy::default();
-        let payment_reference = "0x1122334455667788".to_string();
-        let currency = "USD".to_string();
         let (to, amount, fee_address, fee_amount, max_rate_timespan) = default_values();
         contract.transfer_with_reference(
-            payment_reference,
+            PAYMENT_REF.into(),
             to,
             amount,
-            currency,
-            fee_address,
-            fee_amount,
-            max_rate_timespan,
-        );
-    }
-
-    #[test]
-    #[should_panic(expected = r#"Only payments denominated in USD are implemented for now"#)]
-    fn transfer_with_wrong_currency() {
-        let context = get_context(alice_account(), ntoy(100), 10u64.pow(14), false);
-        testing_env!(context);
-        let mut contract = ConversionProxy::default();
-        let payment_reference = "0x11223344556677".to_string();
-        let currency = "HKD".to_string();
-        let (to, amount, fee_address, fee_amount, max_rate_timespan) = default_values();
-        contract.transfer_with_reference(
-            payment_reference,
-            to,
-            amount,
-            currency,
+            CURRENCY_USD.into(),
             fee_address,
             fee_amount,
             max_rate_timespan,
@@ -532,17 +528,14 @@ mod tests {
 
     #[test]
     fn transfer_with_reference() {
-        let context = get_context(alice_account(), ntoy(1), 10u64.pow(14), false);
-        testing_env!(context);
+        testing_env!(get_context(alice_account(), ntoy(1), 10u64.pow(14), false));
         let mut contract = ConversionProxy::default();
-        let payment_reference = "0x1122334455667788".to_string();
-        let currency = "USD".to_string();
         let (to, amount, fee_address, fee_amount, max_rate_timespan) = default_values();
         contract.transfer_with_reference(
-            payment_reference,
+            PAYMENT_REF.into(),
             to,
             amount,
-            currency,
+            CURRENCY_USD.into(),
             fee_address,
             fee_amount,
             max_rate_timespan,
@@ -551,51 +544,48 @@ mod tests {
 
     #[test]
     #[should_panic(expected = r#"ERR_PERMISSION"#)]
-    fn admin_oracle_no_permission() {
+    fn admin_feed_address_no_permission() {
         let context = get_context(alice_account(), ntoy(1), 10u64.pow(14), false);
         testing_env!(context);
         let mut contract = ConversionProxy::default();
-        let (_to, _amount, _fee_address, _fee_amount, _max_rate_timespan) = default_values();
-        contract.set_feed_address("HeS3xrDqHA2CSHTmN9osstz8vbXfgh2mzzzzzzzzzzzz".into());
+        contract.set_feed_address(FEED_ADDRESS.into());
     }
 
     #[test]
     fn admin_feed_address() {
         let owner = ConversionProxy::default().owner_id;
+        testing_env!(get_context(owner, ntoy(1), 10u64.pow(14), false));
         let mut contract = ConversionProxy::default();
-        let context = get_context(owner, ntoy(1), 10u64.pow(14), false);
-        testing_env!(context);
-        let (_to, _amount, _fee_address, _fee_amount, _max_rate_timespan) = default_values();
-        contract.set_feed_address("HeS3xrDqHA2CSHTmN9osstz8vbXfgh2mzzzzzzzzzzzz".into());
+        contract.set_feed_address(FEED_ADDRESS.into());
+        assert_eq!(
+            contract.get_encoded_feed_address(),
+            FEED_ADDRESS.to_string()
+        );
     }
 
     #[test]
     #[should_panic(expected = r#"ERR_PERMISSION"#)]
     fn admin_feed_payer_no_permission() {
-        let context = get_context(alice_account(), ntoy(1), 10u64.pow(14), false);
-        testing_env!(context);
+        testing_env!(get_context(alice_account(), ntoy(1), 10u64.pow(14), false));
         let mut contract = ConversionProxy::default();
-        let (_to, _amount, _fee_address, _fee_amount, _max_rate_timespan) = default_values();
         contract.set_feed_payer();
     }
 
     #[test]
     fn admin_feed_payer() {
         let owner = ConversionProxy::default().owner_id;
+        testing_env!(get_context(owner, ntoy(1), 10u64.pow(14), false));
         let mut contract = ConversionProxy::default();
-        let context = get_context(owner, ntoy(1), 10u64.pow(14), false);
-        testing_env!(context);
-        let (_to, _amount, _fee_address, _fee_amount, _max_rate_timespan) = default_values();
         contract.set_feed_payer();
+        assert_eq!(contract.get_feed_payer(), env::signer_account_pk());
     }
 
     #[test]
     #[should_panic(expected = r#"ERR_PERMISSION"#)]
     fn admin_feed_parser_no_permission() {
-        let context = get_context(alice_account(), ntoy(1), 10u64.pow(14), false);
-        testing_env!(context);
+        testing_env!(get_context(alice_account(), ntoy(1), 10u64.pow(14), false));
         let mut contract = ConversionProxy::default();
-        let (to, _amount, _fee_address, _fee_amount, _max_rate_timespan) = default_values();
+        let (to, _, _, _, _) = default_values();
         contract.set_feed_parser(to.into());
     }
 
@@ -603,19 +593,18 @@ mod tests {
     fn admin_feed_parser() {
         let owner = ConversionProxy::default().owner_id;
         let mut contract = ConversionProxy::default();
-        let context = get_context(owner, ntoy(1), 10u64.pow(14), false);
-        testing_env!(context);
-        let (to, _amount, _fee_address, _fee_amount, _max_rate_timespan) = default_values();
-        contract.set_feed_parser(to.into());
+        testing_env!(get_context(owner, ntoy(1), 10u64.pow(14), false));
+        let (to, _, _, _, _) = default_values();
+        contract.set_feed_parser(to.clone().into());
+        assert_eq!(contract.get_feed_parser(), Into::<AccountId>::into(to));
     }
 
     #[test]
     #[should_panic(expected = r#"ERR_PERMISSION"#)]
     fn admin_owner_no_permission() {
-        let context = get_context(alice_account(), ntoy(1), 10u64.pow(14), false);
-        testing_env!(context);
+        testing_env!(get_context(alice_account(), ntoy(1), 10u64.pow(14), false));
         let mut contract = ConversionProxy::default();
-        let (to, _amount, _fee_address, _fee_amount, _max_rate_timespan) = default_values();
+        let (to, _, _, _, _) = default_values();
         contract.set_owner(to);
     }
 
@@ -623,9 +612,13 @@ mod tests {
     fn admin_owner() {
         let owner = ConversionProxy::default().owner_id;
         let mut contract = ConversionProxy::default();
-        let context = get_context(owner, ntoy(1), 10u64.pow(14), false);
-        testing_env!(context);
-        let (to, _amount, _fee_address, _fee_amount, _max_rate_timespan) = default_values();
-        contract.set_owner(to);
+        testing_env!(get_context(owner, ntoy(1), 10u64.pow(14), false));
+        let (to, _, _, _, _) = default_values();
+        contract.set_owner(to.clone());
+        testing_env!(get_context(to.into(), ntoy(1), 10u64.pow(14), false));
+        assert!(contract.owner_id == env::signer_account_id());
+        assert!(contract.get_feed_payer() != env::signer_account_pk());
+        contract.set_feed_payer();
+        assert_eq!(contract.get_feed_payer(), env::signer_account_pk());
     }
 }
