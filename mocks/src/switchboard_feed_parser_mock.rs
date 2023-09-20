@@ -21,7 +21,7 @@ pub struct PriceEntry {
 }
 
 #[derive(BorshDeserialize, BorshSerialize, Serialize, Deserialize)]
-pub struct SwitchboarIx {
+pub struct SwitchboardIx {
     pub address: Vec<u8>,
     pub payer: Vec<u8>,
 }
@@ -34,7 +34,7 @@ pub struct SwitchboardFeedParser {}
 #[near_bindgen]
 impl SwitchboardFeedParser {
     #[allow(unused_variables)]
-    pub fn aggregator_read(&self, ix: SwitchboarIx) -> Option<PriceEntry> {
+    pub fn aggregator_read(&self, ix: SwitchboardIx) -> Option<PriceEntry> {
         match &*bs58::encode(ix.address).into_string() {
             "testNEARtoUSD" => Some(PriceEntry {
                 result: SwitchboardDecimal {
@@ -97,7 +97,7 @@ mod tests {
         let context = get_context("alice.near".to_string(), to_yocto("1"), 10u64.pow(14), true);
         testing_env!(context);
         let contract = SwitchboardFeedParser::default();
-        if let Some(result) = contract.aggregator_read(SwitchboarIx {
+        if let Some(result) = contract.aggregator_read(SwitchboardIx {
             address: bs58::decode("testNEARtoUSD").into_vec().expect("WRONG VEC"),
             payer: bs58::decode("anynearpayer").into_vec().expect("WRONG VEC"),
         }) {
@@ -121,7 +121,7 @@ mod tests {
         let context = get_context("alice.near".to_string(), to_yocto("1"), 10u64.pow(14), true);
         testing_env!(context);
         let contract = SwitchboardFeedParser::default();
-        contract.aggregator_read(SwitchboarIx {
+        contract.aggregator_read(SwitchboardIx {
             address: bs58::decode("wrongAggregator")
                 .into_vec()
                 .expect("WRONG VEC"),

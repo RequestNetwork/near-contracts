@@ -35,7 +35,7 @@ pub struct PriceEntry {
 }
 
 #[derive(BorshDeserialize, BorshSerialize, Serialize, Deserialize)]
-pub struct SwitchboarIx {
+pub struct SwitchboardIx {
     pub address: Vec<u8>, // This feed address reference a specific price feed, see https://app.switchboard.xyz
     pub payer: Vec<u8>,
 }
@@ -43,7 +43,7 @@ pub struct SwitchboarIx {
 // Interface of the Switchboard feed parser
 #[near_sdk::ext_contract(sb_contract)]
 trait Switchboard {
-    fn aggregator_read(ix: SwitchboarIx) -> Promise<PriceEntry>;
+    fn aggregator_read(ix: SwitchboardIx) -> Promise<PriceEntry>;
 }
 
 ///
@@ -132,7 +132,7 @@ impl ConversionProxy {
         assert_eq!(reference_vec.len(), 8, "Incorrect payment reference length");
 
         let get_rate = sb_contract::aggregator_read(
-            SwitchboarIx {
+            SwitchboardIx {
                 address: self.feed_address.clone(),
                 payer: self.feed_payer.clone(),
             },
