@@ -1,18 +1,11 @@
 use mocks::fungible_token_mock::FungibleTokenContractContract;
 use near_sdk::json_types::U128;
 use near_sdk_sim::transaction::ExecutionStatus;
-use near_sdk_sim::{call, to_yocto, ContractAccount, ExecutionResult, UserAccount};
+use near_sdk_sim::{call, ContractAccount, ExecutionResult, UserAccount};
 
-pub fn assert_almost_eq_with_max_delta(left: u128, right: u128, max_delta: u128) {
-    assert!(
-        std::cmp::max(left, right) - std::cmp::min(left, right) <= max_delta,
-        "{}",
-        format!("Left {left} is not even close to Right {right} within delta {max_delta}")
-    );
-}
-
-pub fn assert_eq_with_gas(left: u128, right: u128) {
-    assert_almost_eq_with_max_delta(left, right, to_yocto("0.005"));
+/// Util to compare 2 numbers in yocto, +/- 1 yocto to ignore math precision issues
+pub fn yocto_almost_eq(left: u128, right: u128) -> bool {
+    return std::cmp::max(left, right) - std::cmp::min(left, right) <= 1;
 }
 
 /// Util to check a balance is the same as in a previous state
@@ -48,7 +41,7 @@ pub fn assert_spent(
     assert!(current_balance <= previous_balance, "Did not spend.");
     assert!(
         current_balance == previous_balance - expected_spent_amount,
-        "Spent {} instead of {}",
+        "Spent      {}\ninstead of {}",
         previous_balance - current_balance,
         expected_spent_amount
     );

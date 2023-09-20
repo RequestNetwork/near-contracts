@@ -209,6 +209,7 @@ impl ConversionProxy {
             panic!("ERR_PERMISSION");
         }
     }
+
     pub fn set_feed_payer(&mut self) {
         let signer_id = env::predecessor_account_id();
         if self.owner_id == signer_id {
@@ -511,8 +512,7 @@ mod tests {
     #[test]
     #[should_panic(expected = r#"Not enough attached Gas to call this method"#)]
     fn transfer_with_not_enough_gas() {
-        let context = get_context(alice_account(), ntoy(1), 10u64.pow(13), false);
-        testing_env!(context);
+        testing_env!(get_context(alice_account(), ntoy(1), 10u64.pow(13), false));
         let mut contract = ConversionProxy::default();
         let (to, amount, fee_address, fee_amount, max_rate_timespan) = default_values();
         contract.transfer_with_reference(
@@ -545,8 +545,7 @@ mod tests {
     #[test]
     #[should_panic(expected = r#"ERR_PERMISSION"#)]
     fn admin_feed_address_no_permission() {
-        let context = get_context(alice_account(), ntoy(1), 10u64.pow(14), false);
-        testing_env!(context);
+        testing_env!(get_context(alice_account(), ntoy(1), 10u64.pow(14), false));
         let mut contract = ConversionProxy::default();
         contract.set_feed_address(FEED_ADDRESS.into());
     }

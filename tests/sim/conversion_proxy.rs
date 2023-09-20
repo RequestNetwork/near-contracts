@@ -2,7 +2,6 @@ use crate::utils::*;
 use conversion_proxy::ConversionProxyContract;
 use mocks::switchboard_feed_parser_mock::SwitchboardFeedParserContract;
 use near_sdk::json_types::{U128, U64};
-use near_sdk::Balance;
 use near_sdk_sim::init_simulator;
 use near_sdk_sim::runtime::GenesisConfig;
 use near_sdk_sim::ContractAccount;
@@ -15,10 +14,10 @@ near_sdk::setup_alloc!();
 
 const PROXY_ID: &str = "conversion_proxy";
 lazy_static_include::lazy_static_include_bytes! {
-   PROXY_BYTES => "target/wasm32-unknown-unknown/release/conversion_proxy.wasm"
+   pub PROXY_BYTES => "target/wasm32-unknown-unknown/release/conversion_proxy.wasm"
 }
 lazy_static_include::lazy_static_include_bytes! {
-   MOCKED_BYTES => "target/wasm32-unknown-unknown/debug/mocks.wasm"
+   pub MOCKED_BYTES => "target/wasm32-unknown-unknown/debug/mocks.wasm"
 }
 
 const DEFAULT_BALANCE: &str = "400000";
@@ -33,7 +32,8 @@ fn init() -> (
     ContractAccount<ConversionProxyContract>,
     UserAccount,
 ) {
-    let genesis = GenesisConfig::default();
+    let mut genesis = GenesisConfig::default();
+    genesis.gas_price = 0;
     let root = init_simulator(Some(genesis));
 
     deploy!(
@@ -99,19 +99,14 @@ fn test_transfer() {
     );
     result.assert_success();
 
-    println!(
-        "test_transfer_usd_near ==> TeraGas burnt: {}",
-        result.gas_burnt() as f64 / 1e12
-    );
-
     let alice_balance = alice.account().unwrap().amount;
     assert!(alice_balance < initial_alice_balance);
     let spent_amount = initial_alice_balance - alice_balance;
     // 12'001.00 USD worth of NEAR / 1.234
     let expected_spent = to_yocto("12001") * 1000 / 1234;
     assert!(
-        spent_amount - expected_spent < to_yocto("0.005"),
-        "Alice should spend 12'000 + 1 USD worth of NEAR (+ gas). Spent {spent_amount}, expected: {expected_spent}.",
+        yocto_almost_eq(spent_amount, expected_spent),
+        "Alice should spend 12'000 + 1 USD worth of NEAR. \nSpent:    {spent_amount}. \nExpected: {expected_spent}.",
     );
 
     assert!(bob.account().unwrap().amount > initial_bob_balance);
@@ -157,13 +152,12 @@ fn test_transfer_with_invalid_reference_length() {
     );
     assert_one_promise_error(result.clone(), "Incorrect payment reference length");
 
-    println!(
-        "test_transfer_with_invalid_parameter_length > TeraGas burnt: {}",
-        result.gas_burnt() as f64 / 1e12
-    );
-
     // Check Alice balance
-    assert_eq_with_gas(to_yocto(DEFAULT_BALANCE), alice.account().unwrap().amount);
+    assert_eq!(
+        to_yocto(DEFAULT_BALANCE),
+        alice.account().unwrap().amount,
+        "Alice should not spend NEAR on invalid payment.",
+    );
 }
 
 #[test]
@@ -203,10 +197,6 @@ fn test_transfer_with_low_deposit() {
     let payment_address = bob.account_id().try_into().unwrap();
     let fee_address = builder.account_id().try_into().unwrap();
 
-    assert!(
-        transfer_amount / to_yocto("1") > 0,
-        "Sanity check: this test is only relevant with high transfer amounts"
-    );
     let result = call!(
         alice,
         proxy.transfer_with_reference(
@@ -224,19 +214,21 @@ fn test_transfer_with_low_deposit() {
     assert_eq!(result.logs().len(), 1, "Wrong number of logs");
     assert!(result.logs()[0].contains("Deposit too small for payment"));
 
-    // Alice's balance is slightly impacted by gas, hence we divide by 1 NEAR
-    assert!(
-        alice.account().unwrap().amount / to_yocto("1") == initial_alice_balance / to_yocto("1"),
-        "Alice should not spend NEAR on a failed payment",
+    assert_eq!(
+        alice.account().unwrap().amount,
+        initial_alice_balance,
+        "Alice should not spend NEAR on a failed payment.",
     );
 
     // The contract's balance is slightly impacted by execution, hence we divide by 1 NEAR
-    assert!(
-        proxy.account().unwrap().amount / to_yocto("1") == initial_contract_balance / to_yocto("1"),
+    assert_eq!(
+        proxy.account().unwrap().amount,
+        initial_contract_balance,
         "Contract's balance should be unchanged"
     );
-    assert!(
-        builder.account().unwrap().amount == initial_bob_balance,
+    assert_eq!(
+        builder.account().unwrap().amount,
+        initial_bob_balance,
         "Builder's balance should be unchanged"
     );
 }
@@ -266,11 +258,9 @@ fn test_transfer_zero_usd() {
     result.assert_success();
 
     let alice_balance = alice.account().unwrap().amount;
-    assert!(alice_balance < initial_alice_balance);
-    let spent_amount = initial_alice_balance - alice_balance;
-    assert!(
-        spent_amount < to_yocto("0.005"),
-        "Alice should not spend NEAR on a 0 USD payment",
+    assert_eq!(
+        initial_alice_balance, alice_balance,
+        "Alice should not spend NEAR on a 0 USD payment.",
     );
 
     assert!(
