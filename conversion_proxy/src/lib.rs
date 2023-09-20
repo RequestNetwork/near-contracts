@@ -435,7 +435,7 @@ mod tests {
         )
     }
 
-    pub(crate) const CURRENCY_USD: &str = "USD";
+    pub(crate) const USD: &str = "USD";
     pub(crate) const PAYMENT_REF: &str = "0x1122334455667788";
     pub(crate) const FEED_ADDRESS: &str = "HeS3xrDqHA2CSHTmN9osstz8vbXfgh2mzzzzzzzzzzzz";
 
@@ -455,7 +455,7 @@ mod tests {
             payment_reference,
             to,
             amount,
-            CURRENCY_USD.into(),
+            USD.into(),
             fee_address,
             fee_amount,
             max_rate_timespan,
@@ -478,7 +478,7 @@ mod tests {
             payment_reference,
             to,
             amount,
-            CURRENCY_USD.into(),
+            USD.into(),
             fee_address,
             fee_amount,
             max_rate_timespan,
@@ -519,7 +519,7 @@ mod tests {
             PAYMENT_REF.into(),
             to,
             amount,
-            CURRENCY_USD.into(),
+            USD.into(),
             fee_address,
             fee_amount,
             max_rate_timespan,
@@ -535,7 +535,7 @@ mod tests {
             PAYMENT_REF.into(),
             to,
             amount,
-            CURRENCY_USD.into(),
+            USD.into(),
             fee_address,
             fee_amount,
             max_rate_timespan,

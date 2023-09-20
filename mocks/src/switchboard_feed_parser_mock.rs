@@ -56,7 +56,6 @@ impl SwitchboardFeedParser {
 mod tests {
 
     use super::*;
-    // use crate::switchboard_feed_parser_mock::SwitchboardFeedParser;
     use near_sdk::{testing_env, AccountId, Balance, Gas, MockedBlockchain, VMContext};
     use near_sdk_sim::to_yocto;
 
