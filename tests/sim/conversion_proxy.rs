@@ -1,6 +1,6 @@
 use crate::utils::*;
 use conversion_proxy::ConversionProxyContract;
-use mocks::switchboard_feed_parser_mock::SwitchboardFeedParserContract;
+use mocks::switchboard_feed_parser_mock::{SwitchboardFeedParserContract, VALID_FEED_ADDRESS};
 use near_sdk::json_types::{U128, U64};
 use near_sdk_sim::init_simulator;
 use near_sdk_sim::runtime::GenesisConfig;
@@ -56,7 +56,7 @@ fn init() -> (
         bytes: &PROXY_BYTES,
         signer_account: root,
         deposit: to_yocto("5"),
-        init_method: new("mockedswitchboard".into(), bs58::decode("testNEARtoUSD").into_vec().unwrap())
+        init_method: new("mockedswitchboard".into(), VALID_FEED_ADDRESS)
     );
 
     let set_feed_payer_result = call!(root, proxy.set_feed_payer());

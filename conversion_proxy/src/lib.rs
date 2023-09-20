@@ -1,10 +1,12 @@
+use std::convert::TryInto;
+
 use near_sdk::borsh::{self, BorshDeserialize, BorshSerialize};
 use near_sdk::json_types::{ValidAccountId, U128, U64};
 use near_sdk::serde::{Deserialize, Serialize};
 use near_sdk::serde_json::json;
 use near_sdk::{
     bs58, env, log, near_bindgen, serde_json, AccountId, Balance, Gas, Promise, PromiseResult,
-    Timestamp,
+    PublicKey, Timestamp,
 };
 
 near_sdk::setup_alloc!();
@@ -34,10 +36,12 @@ pub struct PriceEntry {
     pub round_open_timestamp: Timestamp,
 }
 
+pub type Uuid = [u8; 32];
+
 #[derive(BorshDeserialize, BorshSerialize, Serialize, Deserialize)]
 pub struct SwitchboardIx {
-    pub address: Vec<u8>, // This feed address reference a specific price feed, see https://app.switchboard.xyz
-    pub payer: Vec<u8>,
+    pub address: Uuid, // This feed address reference a specific price feed, see https://app.switchboard.xyz
+    pub payer: Uuid,
 }
 
 // Interface of the Switchboard feed parser
@@ -56,8 +60,8 @@ trait Switchboard {
 #[derive(Default, BorshDeserialize, BorshSerialize)]
 pub struct ConversionProxy {
     pub feed_parser: AccountId,
-    pub feed_address: Vec<u8>,
-    pub feed_payer: Vec<u8>,
+    pub feed_address: Uuid,
+    pub feed_payer: Uuid,
     pub owner_id: AccountId,
 }
 
@@ -158,9 +162,9 @@ impl ConversionProxy {
     }
 
     #[init]
-    pub fn new(feed_parser: AccountId, feed_address: Vec<u8>) -> Self {
+    pub fn new(feed_parser: AccountId, feed_address: Uuid) -> Self {
         let owner_id = env::signer_account_id();
-        let feed_payer = env::signer_account_pk();
+        let feed_payer: Uuid = Self::get_uuid(env::signer_account_pk());
         Self {
             feed_parser,
             feed_address,
@@ -185,13 +189,17 @@ impl ConversionProxy {
     pub fn set_feed_address(&mut self, feed_address: String) {
         let signer_id = env::predecessor_account_id();
         if self.owner_id == signer_id {
-            self.feed_address = bs58::decode(feed_address).into_vec().unwrap();
+            self.feed_address = bs58::decode(feed_address)
+                .into_vec()
+                .expect("feed_address should be decodable into a vector")
+                .try_into()
+                .expect("feed_address should be decodable into [u8; 32]");
         } else {
             panic!("ERR_PERMISSION");
         }
     }
 
-    pub fn get_feed_address(&self) -> Vec<u8> {
+    pub fn get_feed_address(&self) -> Uuid {
         return self.feed_address.clone();
     }
 
@@ -211,29 +219,33 @@ impl ConversionProxy {
     pub fn set_feed_payer(&mut self) {
         let signer_id = env::predecessor_account_id();
         if self.owner_id == signer_id {
-            let feed_payer = env::signer_account_pk();
-            let vec_length = feed_payer.len();
-            if vec_length == 32 {
-                self.feed_payer = env::signer_account_pk();
-                return;
-            }
-            // For some reason, the VM sometimes prepends a 0 in front of the 32-long vector
-            if vec_length == 33 && feed_payer[0] == 0_u8 {
-                self.feed_payer = feed_payer[1..].to_vec();
-                return;
-            }
-            panic!("ERR_OWNER_PK_LENGTH");
+            self.feed_payer = Self::get_uuid(env::signer_account_pk());
         } else {
             panic!("ERR_PERMISSION");
         }
     }
 
-    pub fn get_feed_payer(&self) -> Vec<u8> {
+    pub fn get_feed_payer(&self) -> Uuid {
         return self.feed_payer.clone();
     }
 
     pub fn get_encoded_feed_payer(&self) -> String {
         return bs58::encode(self.feed_payer.clone()).into_string();
+    }
+
+    /// This method transforms a PublicKey (eg. ed25519:3H8UcosBhKfPcuZj7ffr3QqG5BxiGzJECqPZAZka5fJn) into a Uuid (alias for [u8; 32])
+    /// Should be useless onchain.
+    #[private]
+    pub fn get_uuid(public_key: PublicKey) -> Uuid {
+        let vec_length = public_key.len();
+        if vec_length == 32 {
+            return public_key.try_into().unwrap();
+        }
+        // For some reason, the local VM sometimes prepends a 0 in front of the 32-long vector
+        if vec_length == 33 && public_key[0] == 0_u8 {
+            return public_key[1..].try_into().unwrap();
+        }
+        panic!("ERR_OWNER_PK_LENGTH {} {:?}", vec_length, public_key);
     }
 
     #[private]
@@ -403,10 +415,7 @@ mod tests {
         VMContext {
             current_account_id: predecessor_account_id.clone(),
             signer_account_id: predecessor_account_id.clone(),
-            signer_account_pk: vec![
-                0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22,
-                23, 24, 25, 26, 27, 28, 29, 30, 31,
-            ],
+            signer_account_pk: (1..33).collect(), // Public key: Size 32
             predecessor_account_id,
             input: vec![],
             block_index: 1,
@@ -577,7 +586,7 @@ mod tests {
         testing_env!(get_context(owner, ntoy(1), 10u64.pow(14), false));
         let mut contract = ConversionProxy::default();
         contract.set_feed_payer();
-        assert_eq!(contract.get_feed_payer(), env::signer_account_pk());
+        assert_eq!(contract.get_feed_payer().to_vec(), env::signer_account_pk());
     }
 
     #[test]
@@ -617,8 +626,8 @@ mod tests {
         contract.set_owner(to.clone());
         testing_env!(get_context(to.into(), ntoy(1), 10u64.pow(14), false));
         assert!(contract.owner_id == env::signer_account_id());
-        assert!(contract.get_feed_payer() != env::signer_account_pk());
+        assert!(contract.get_feed_payer().to_vec() != env::signer_account_pk());
         contract.set_feed_payer();
-        assert_eq!(contract.get_feed_payer(), env::signer_account_pk());
+        assert_eq!(contract.get_feed_payer().to_vec(), env::signer_account_pk());
     }
 }

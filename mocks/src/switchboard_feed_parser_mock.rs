@@ -1,6 +1,6 @@
 use near_sdk::borsh::{self, BorshDeserialize, BorshSerialize};
 use near_sdk::serde::{Deserialize, Serialize};
-use near_sdk::{bs58, env, near_bindgen, Timestamp};
+use near_sdk::{env, near_bindgen, Timestamp};
 
 /**
  * Mocking the Switchboard feed parser contract for tests
@@ -20,10 +20,12 @@ pub struct PriceEntry {
     pub round_open_timestamp: Timestamp,
 }
 
+pub type Uuid = [u8; 32];
+
 #[derive(BorshDeserialize, BorshSerialize, Serialize, Deserialize)]
 pub struct SwitchboardIx {
-    pub address: Vec<u8>,
-    pub payer: Vec<u8>,
+    pub address: Uuid,
+    pub payer: Uuid,
 }
 
 // For mocks: state of Switchboard feed parser
@@ -31,12 +33,14 @@ pub struct SwitchboardIx {
 #[derive(Default, BorshDeserialize, BorshSerialize)]
 pub struct SwitchboardFeedParser {}
 
+pub const VALID_FEED_ADDRESS: [u8; 32] = [0; 32];
+
 #[near_bindgen]
 impl SwitchboardFeedParser {
     #[allow(unused_variables)]
     pub fn aggregator_read(&self, ix: SwitchboardIx) -> Option<PriceEntry> {
-        match &*bs58::encode(ix.address).into_string() {
-            "testNEARtoUSD" => Some(PriceEntry {
+        match ix.address {
+            VALID_FEED_ADDRESS => Some(PriceEntry {
                 result: SwitchboardDecimal {
                     mantissa: i128::from(1234000),
                     scale: u8::from(6).into(),
@@ -94,8 +98,8 @@ mod tests {
         ));
         let contract = SwitchboardFeedParser::default();
         if let Some(result) = contract.aggregator_read(SwitchboardIx {
-            address: bs58::decode("testNEARtoUSD").into_vec().unwrap(),
-            payer: bs58::decode("anynearpayer").into_vec().unwrap(),
+            address: [0; 32],
+            payer: [1; 32],
         }) {
             assert_eq!(result.result.mantissa, i128::from(1234000));
             assert_eq!(result.result.scale, 6);
@@ -114,8 +118,8 @@ mod tests {
         ));
         let contract = SwitchboardFeedParser::default();
         contract.aggregator_read(SwitchboardIx {
-            address: bs58::decode("wrongAggregator").into_vec().unwrap(),
-            payer: bs58::decode("anynearpayer").into_vec().unwrap(),
+            address: [255; 32],
+            payer: [1; 32],
         });
     }
 }
