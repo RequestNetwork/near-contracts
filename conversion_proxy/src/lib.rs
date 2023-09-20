@@ -308,12 +308,15 @@ impl ConversionProxy {
             PromiseResult::Failed => panic!("ERR_FAILED_ORACLE_FETCH"),
         };
         // Check rate errors
-        assert!(
-            rate.num_error == 0 && rate.num_success == 1,
-            "Conversion errors: {}, successes: {}",
-            rate.num_error,
-            rate.num_success
-        );
+        if rate.num_error != 0 || rate.num_success < 1 {
+            Promise::new(payer.clone().to_string()).transfer(env::attached_deposit());
+            log!(
+                "Conversion errors: {}, successes: {}",
+                rate.num_error,
+                rate.num_success
+            );
+            return 0_u128;
+        }
         // Check rate validity
         assert!(
             u64::from(max_rate_timespan) == 0
