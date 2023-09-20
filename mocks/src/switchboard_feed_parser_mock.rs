@@ -86,20 +86,16 @@ mod tests {
     }
     #[test]
     fn aggregator_read() {
-        let disp_vec = bs58::decode("E81iAUr7RPDUksAFtZxn7curbUVRy1Gps6sr6JnQALHx")
-            .into_vec()
-            .expect("!!")
-            .into_iter()
-            .map(|c| c.to_string())
-            .collect::<Vec<String>>()
-            .join(",");
-        println!("RESULT: {}", disp_vec);
-        let context = get_context("alice.near".to_string(), to_yocto("1"), 10u64.pow(14), true);
-        testing_env!(context);
+        testing_env!(get_context(
+            "alice.near".to_string(),
+            to_yocto("1"),
+            10u64.pow(14),
+            true
+        ));
         let contract = SwitchboardFeedParser::default();
         if let Some(result) = contract.aggregator_read(SwitchboardIx {
-            address: bs58::decode("testNEARtoUSD").into_vec().expect("WRONG VEC"),
-            payer: bs58::decode("anynearpayer").into_vec().expect("WRONG VEC"),
+            address: bs58::decode("testNEARtoUSD").into_vec().unwrap(),
+            payer: bs58::decode("anynearpayer").into_vec().unwrap(),
         }) {
             assert_eq!(result.result.mantissa, i128::from(1234000));
             assert_eq!(result.result.scale, 6);
@@ -110,22 +106,16 @@ mod tests {
     #[test]
     #[should_panic(expected = r#"InvalidAggregator"#)]
     fn missing_aggregator_read() {
-        let disp_vec = bs58::decode("E81iAUr7RPDUksAFtZxn7curbUVRy1Gps6sr6JnQALHx")
-            .into_vec()
-            .expect("!!")
-            .into_iter()
-            .map(|c| c.to_string())
-            .collect::<Vec<String>>()
-            .join(",");
-        println!("RESULT: {}", disp_vec);
-        let context = get_context("alice.near".to_string(), to_yocto("1"), 10u64.pow(14), true);
-        testing_env!(context);
+        testing_env!(get_context(
+            "alice.near".to_string(),
+            to_yocto("1"),
+            10u64.pow(14),
+            true
+        ));
         let contract = SwitchboardFeedParser::default();
         contract.aggregator_read(SwitchboardIx {
-            address: bs58::decode("wrongAggregator")
-                .into_vec()
-                .expect("WRONG VEC"),
-            payer: bs58::decode("anynearpayer").into_vec().expect("WRONG VEC"),
+            address: bs58::decode("wrongAggregator").into_vec().unwrap(),
+            payer: bs58::decode("anynearpayer").into_vec().unwrap(),
         });
     }
 }

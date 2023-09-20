@@ -185,9 +185,7 @@ impl ConversionProxy {
     pub fn set_feed_address(&mut self, feed_address: String) {
         let signer_id = env::predecessor_account_id();
         if self.owner_id == signer_id {
-            self.feed_address = bs58::decode(feed_address)
-                .into_vec()
-                .expect("Wrong feed address format");
+            self.feed_address = bs58::decode(feed_address).into_vec().unwrap();
         } else {
             panic!("ERR_PERMISSION");
         }
@@ -326,7 +324,7 @@ impl ConversionProxy {
         );
         let conversion_rate = 0_u128
             .checked_add_signed(rate.result.mantissa)
-            .expect("Negative conversion rate");
+            .expect("The conversion rate should be positive");
         let decimals = u32::from(rate.result.scale);
         let main_payment = (Balance::from(amount) * ONE_NEAR * 10u128.pow(decimals)
             / conversion_rate

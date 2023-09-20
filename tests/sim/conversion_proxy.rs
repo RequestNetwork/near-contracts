@@ -56,7 +56,7 @@ fn init() -> (
         bytes: &PROXY_BYTES,
         signer_account: root,
         deposit: to_yocto("5"),
-        init_method: new("mockedswitchboard".into(), bs58::decode("testNEARtoUSD").into_vec().expect("WRONG VEC"))
+        init_method: new("mockedswitchboard".into(), bs58::decode("testNEARtoUSD").into_vec().unwrap())
     );
 
     let set_feed_payer_result = call!(root, proxy.set_feed_payer());
