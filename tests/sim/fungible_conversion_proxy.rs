@@ -238,7 +238,7 @@ fn test_transfer_not_enough() {
         ft_contract.user_account,
         proxy.ft_on_transfer(alice.account_id(), send_amt.0.to_string(), msg)
     );
-    assert_one_promise_error(result, "Deposit too small")
+    result.assert_one_promise_error("Deposit too small");
 }
 
 #[test]
@@ -410,5 +410,5 @@ fn test_outdated_rate() {
         ft_contract.user_account,
         proxy.ft_on_transfer(alice.account_id(), send_amt.0.to_string(), msg)
     );
-    assert_one_promise_error(result, "Conversion rate too old");
+    result.assert_one_promise_error("Conversion rate too old");
 }

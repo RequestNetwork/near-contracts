@@ -144,18 +144,17 @@ fn test_transfer() {
         ft_contract.user_account,
         proxy.ft_on_transfer(alice.account_id(), send_amt.0.to_string(), args.into())
     );
-    result.assert_success();
-    assert_eq!(result.logs().len(), 1, "Wrong number of logs");
-    let expected_log = json!({
-        "amount": "498000000", // 500 USDC.e - 2 USDC.e fee
-        "token_address": "mockedft",
-        "fee_address": "builder",
-        "fee_amount": "2000000",
-        "payment_reference": "abc7c8bb1234fd11",
-        "to": "bob",
-    })
-    .to_string();
-    assert_eq!(result.logs()[0], expected_log);
+    result.assert_success_one_log(
+        &json!({
+            "amount": "498000000", // 500 USDC.e - 2 USDC.e fee
+            "token_address": "mockedft",
+            "fee_address": "builder",
+            "fee_amount": "2000000",
+            "payment_reference": "abc7c8bb1234fd11",
+            "to": "bob",
+        })
+        .to_string(),
+    );
 
     // The mocked fungible token does not handle change
     let change = result.unwrap_json::<String>().parse::<u128>().unwrap();
@@ -184,7 +183,7 @@ fn transfer_less_than_fee_amount() {
         ft_contract.user_account,
         proxy.ft_on_transfer(alice.account_id(), send_amt.0.to_string(), args.into())
     );
-    assert_one_promise_error(result, "amount smaller than fee_amount")
+    result.assert_one_promise_error("amount smaller than fee_amount");
 }
 
 #[test]
@@ -210,9 +209,7 @@ fn test_transfer_receiver_send_failed() {
         ft_contract.user_account,
         proxy.ft_on_transfer(alice.account_id(), send_amt.0.to_string(), args.into())
     );
-    result.assert_success();
-    assert_eq!(result.logs().len(), 1, "Wrong number of logs");
-    assert_eq!(result.logs()[0], "Transfer failed to bob or builder. Returning attached amount of 500000000 of token mockedft to alice");
+    result.assert_success_one_log("Transfer failed to bob or builder. Returning attached amount of 500000000 of token mockedft to alice");
 
     // The mocked fungible token does not handle change
     let change = result.unwrap_json::<String>().parse::<u128>().unwrap();
@@ -250,9 +247,7 @@ fn test_transfer_fee_receiver_send_failed() {
         ft_contract.user_account,
         proxy.ft_on_transfer(alice.account_id(), send_amt.0.to_string(), args.into())
     );
-    result.assert_success();
-    assert_eq!(result.logs().len(), 1, "Wrong number of logs");
-    assert_eq!(result.logs()[0], "Transfer failed to bob or builder. Returning attached amount of 500000000 of token mockedft to alice");
+    result.assert_success_one_log("Transfer failed to bob or builder. Returning attached amount of 500000000 of token mockedft to alice");
 
     // The mocked fungible token does not handle change
     let change = result.unwrap_json::<String>().parse::<u128>().unwrap();
@@ -284,18 +279,17 @@ fn test_transfer_zero_usd() {
         ft_contract.user_account,
         proxy.ft_on_transfer(alice.account_id(), send_amt.0.to_string(), args.into())
     );
-    result.assert_success();
-    assert_eq!(result.logs().len(), 1, "Wrong number of logs");
-    let expected_log = json!({
-        "amount": "0",
-        "token_address": "mockedft",
-        "fee_address": "builder",
-        "fee_amount": "0",
-        "payment_reference": "abc7c8bb1234fd12",
-        "to": "bob",
-    })
-    .to_string();
-    assert_eq!(result.logs()[0], expected_log);
+    result.assert_success_one_log(
+        &json!({
+            "amount": "0",
+            "token_address": "mockedft",
+            "fee_address": "builder",
+            "fee_amount": "0",
+            "payment_reference": "abc7c8bb1234fd12",
+            "to": "bob",
+        })
+        .to_string(),
+    );
 
     assert_unchanged_balance(alice, alice_balance_before, &ft_contract, "Alice");
     assert_unchanged_balance(bob, bob_balance_before, &ft_contract, "Bob");
