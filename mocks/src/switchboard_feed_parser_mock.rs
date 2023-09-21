@@ -1,6 +1,7 @@
 use near_sdk::borsh::{self, BorshDeserialize, BorshSerialize};
 use near_sdk::serde::{Deserialize, Serialize};
-use near_sdk::{env, near_bindgen, Timestamp};
+use near_sdk::{bs58, env, near_bindgen, Timestamp};
+use std::str;
 
 /**
  * Mocking the Switchboard feed parser contract for tests
@@ -33,7 +34,11 @@ pub struct SwitchboardIx {
 #[derive(Default, BorshDeserialize, BorshSerialize)]
 pub struct SwitchboardFeedParser {}
 
-pub const VALID_FEED_ADDRESS: [u8; 32] = [0; 32];
+const VALID_FEED_ADDRESS: [u8; 32] = [0; 32];
+
+pub fn valid_feed_key() -> String {
+    bs58::encode(&VALID_FEED_ADDRESS).into_string()
+}
 
 #[near_bindgen]
 impl SwitchboardFeedParser {

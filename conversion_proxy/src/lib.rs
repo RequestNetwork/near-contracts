@@ -162,9 +162,10 @@ impl ConversionProxy {
     }
 
     #[init]
-    pub fn new(feed_parser: AccountId, feed_address: Uuid) -> Self {
+    pub fn new(feed_parser: AccountId, feed_address_pk: &String) -> Self {
         let owner_id = env::signer_account_id();
-        let feed_payer: Uuid = Self::get_uuid(env::signer_account_pk());
+        let feed_payer = Self::get_uuid(env::signer_account_pk()).expect("ERR_OWNER_PK_LENGTH");
+        let feed_address = Self::get_uuid_from_string(feed_address_pk);
         Self {
             feed_parser,
             feed_address,
@@ -186,14 +187,10 @@ impl ConversionProxy {
         return self.feed_parser.clone();
     }
 
-    pub fn set_feed_address(&mut self, feed_address: String) {
+    pub fn set_feed_address(&mut self, feed_address: &String) {
         let signer_id = env::predecessor_account_id();
         if self.owner_id == signer_id {
-            self.feed_address = bs58::decode(feed_address)
-                .into_vec()
-                .expect("feed_address should be decodable into a vector")
-                .try_into()
-                .expect("feed_address should be decodable into [u8; 32]");
+            self.feed_address = Self::get_uuid_from_string(feed_address);
         } else {
             panic!("ERR_PERMISSION");
         }
@@ -219,7 +216,8 @@ impl ConversionProxy {
     pub fn set_feed_payer(&mut self) {
         let signer_id = env::predecessor_account_id();
         if self.owner_id == signer_id {
-            self.feed_payer = Self::get_uuid(env::signer_account_pk());
+            self.feed_payer =
+                Self::get_uuid(env::signer_account_pk()).expect("ERR_OWNER_PK_LENGTH");
         } else {
             panic!("ERR_PERMISSION");
         }
@@ -236,16 +234,25 @@ impl ConversionProxy {
     /// This method transforms a PublicKey (eg. ed25519:3H8UcosBhKfPcuZj7ffr3QqG5BxiGzJECqPZAZka5fJn) into a Uuid (alias for [u8; 32])
     /// Should be useless onchain.
     #[private]
-    pub fn get_uuid(public_key: PublicKey) -> Uuid {
+    pub fn get_uuid(public_key: PublicKey) -> Option<Uuid> {
         let vec_length = public_key.len();
         if vec_length == 32 {
-            return public_key.try_into().unwrap();
+            return Some(public_key.try_into().unwrap());
         }
         // For some reason, the local VM sometimes prepends a 0 in front of the 32-long vector
         if vec_length == 33 && public_key[0] == 0_u8 {
-            return public_key[1..].try_into().unwrap();
+            return Some(public_key[1..].try_into().unwrap());
         }
-        panic!("ERR_OWNER_PK_LENGTH {} {:?}", vec_length, public_key);
+        return None;
+    }
+
+    #[private]
+    pub fn get_uuid_from_string(public_key: &String) -> Uuid {
+        bs58::decode(public_key)
+            .into_vec()
+            .expect("public_key should be decodable into a vector")
+            .try_into()
+            .expect("public_key should be decodable into [u8; 32]")
     }
 
     #[private]
@@ -294,6 +301,15 @@ impl ConversionProxy {
         }
     }
 
+    /// This method refunds a payer, then logs an error message.
+    /// Used as a bandaid until we find a solution for refund.then(panic)
+    #[private]
+    pub fn refund_then_log(&mut self, payer: ValidAccountId, error_message: String) -> u128 {
+        Promise::new(payer.clone().to_string()).transfer(env::attached_deposit());
+        log!(error_message);
+        return 0_u128;
+    }
+
     #[private]
     #[payable]
     pub fn rate_callback(
@@ -314,20 +330,24 @@ impl ConversionProxy {
             PromiseResult::Successful(value) => {
                 match serde_json::from_slice::<PriceEntry>(&value) {
                     Ok(value) => value,
-                    Err(_e) => panic!("ERR_INVALID_ORACLE_RESPONSE"),
+                    Err(_e) => {
+                        return self.refund_then_log(payer, "ERR_INVALID_ORACLE_RESPONSE".into())
+                    }
                 }
             }
-            PromiseResult::Failed => panic!("ERR_FAILED_ORACLE_FETCH"),
+            PromiseResult::Failed => {
+                return self.refund_then_log(payer, "ERR_FAILED_ORACLE_FETCH".into());
+            }
         };
         // Check rate errors
         if rate.num_error != 0 || rate.num_success < 1 {
-            Promise::new(payer.clone().to_string()).transfer(env::attached_deposit());
-            log!(
-                "Conversion errors: {}, successes: {}",
-                rate.num_error,
-                rate.num_success
+            return self.refund_then_log(
+                payer,
+                "Conversion errors:".to_string()
+                    + &rate.num_error.to_string()
+                    + &", successes: "
+                    + &rate.num_success.to_string(),
             );
-            return 0_u128;
         }
         // Check rate validity
         assert!(
@@ -351,13 +371,13 @@ impl ConversionProxy {
         let total_payment = main_payment + fee_payment;
         // Check deposit
         if total_payment > env::attached_deposit() {
-            Promise::new(payer.clone().to_string()).transfer(env::attached_deposit());
-            log!(
-                "Deposit too small for payment (Supplied: {}. Demand (incl. fees): {})",
-                env::attached_deposit(),
-                total_payment
+            return self.refund_then_log(
+                payer,
+                "Deposit too small for payment. Supplied: ".to_string()
+                    + &env::attached_deposit().to_string()
+                    + &". Demand (incl. fees): "
+                    + &total_payment.to_string(),
             );
-            return 0_u128;
         }
 
         let change = env::attached_deposit() - (total_payment);
@@ -557,7 +577,7 @@ mod tests {
     fn admin_feed_address_no_permission() {
         testing_env!(get_context(alice_account(), ntoy(1), 10u64.pow(14), false));
         let mut contract = ConversionProxy::default();
-        contract.set_feed_address(FEED_ADDRESS.into());
+        contract.set_feed_address(&FEED_ADDRESS.into());
     }
 
     #[test]
@@ -565,7 +585,7 @@ mod tests {
         let owner = ConversionProxy::default().owner_id;
         testing_env!(get_context(owner, ntoy(1), 10u64.pow(14), false));
         let mut contract = ConversionProxy::default();
-        contract.set_feed_address(FEED_ADDRESS.into());
+        contract.set_feed_address(&FEED_ADDRESS.into());
         assert_eq!(
             contract.get_encoded_feed_address(),
             FEED_ADDRESS.to_string()
