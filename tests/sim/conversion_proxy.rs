@@ -220,7 +220,6 @@ fn test_transfer_with_low_deposit() {
         "Alice should not spend NEAR on a failed payment.",
     );
 
-    // The contract's balance is slightly impacted by execution, hence we divide by 1 NEAR
     assert_eq!(
         proxy.account().unwrap().amount,
         initial_contract_balance,
