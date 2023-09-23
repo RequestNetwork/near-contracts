@@ -1,4 +1,3 @@
-cd mocks/
+./mocks/build.sh
 ./build.sh
-cd ..
 cargo test --all

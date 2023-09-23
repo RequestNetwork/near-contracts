@@ -3,7 +3,7 @@
 # Run with -h for documentation and help
 
 # testnet deployment and values (default)
-NEAR_ENV="testnet"
+NEAR_ENV="testnet";
 oracle_account_id="fpo.opfilabs.testnet"
 provider_account_id="opfilabs.testnet"
 contract_name="conversion_proxy";
@@ -63,11 +63,25 @@ if [ "$contract_name" = "fungible_proxy" ]; then
   near deploy -f --wasmFile ./target/wasm32-unknown-unknown/release/$contract_name.wasm \
    --accountId $ACCOUNT_ID
 else
+  
+  if [ "$contract_name" = "conversion_proxy" ]; then
+    if [ "$NEAR_ENV" = "mainnet" ]; then
+      feed_parser="switchboard-v2.mainnet";
+      feed_address="C3p8SSWQS8j1nx7HrzBBphX5jZcS1EY28EJ5iwjzSix2";
+    else
+      feed_parser="switchboard-v2.testnet";
+      feed_address="7igqhpGQ8xPpyjQ4gMHhXRvtZcrKSGJkdKDJYBiPQgcb";
+    fi
+    initArgs='{"feed_parser":"'$feed_parser'","feed_address_pk":"'$feed_address'"}';
+  else
+    initArgs='{"oracle_account_id": "'$oracle_account_id'", "provider_account_id": "'$provider_account_id'"}';
+  fi
+  echo $initArgs;
   initParams="";
   if ! $patch ; then
     initParams="
     --initFunction new  \
-    --initArgs '{"oracle_account_id": "'$oracle_account_id'", "provider_account_id": "'$provider_account_id'"}'";
+    --initArgs $initArgs";
   fi
   set -x
   near deploy -f --wasmFile ./target/wasm32-unknown-unknown/release/$contract_name.wasm \

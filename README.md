@@ -24,28 +24,26 @@ Smart contracts on NEAR used by the
 Run all contracts unit tests like this:
 
 ```
-cd near-contracts/conversion_proxy
-cargo test
-cd near-contracts/fungible_conversion_proxy
-cargo test
-cd near-contracts/fungible_proxy
-cargo test
-cd near-contracts/mocks
-cargo test
+cargo test -p conversion_proxy
+cargo test -p fungible_conversion_proxy
+cargo test -p fungible_proxy
 ```
 
-## Integration tests
+## Integration tests (on a simulated VM with mocked 3rd party contracts)
+
+Integration tests are located in [tests/sim](tests/sim).
 
 ```
-# To test everything
+# To test everything (unit tests, sanity checks, simulated tests)
+# Requires building contracts (release) and mocks (debug) for simulated tests.
 ./test.sh
 
-# To test contracts one by one:
+# To run integration tests on contracts one by one:
 cargo test conversion_proxy
 cargo test fungible_conversionproxy
 cargo test fungible_proxy
 
-# To run integration tests one by one (examples with main transfers):
+# To run any tests one by one (examples with main transfers on simulated VM):
 cargo test conversion_proxy::test_transfer -- --exact
 cargo test fungible_conversionproxy::test_transfer -- --exact
 cargo test fungible_proxy::test_transfer -- --exact

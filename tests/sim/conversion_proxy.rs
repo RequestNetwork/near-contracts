@@ -1,8 +1,7 @@
 use crate::utils::*;
 use conversion_proxy::ConversionProxyContract;
-use mocks::fpo_oracle_mock::FPOContractContract;
+use mocks::switchboard_feed_parser_mock::{valid_feed_key, SwitchboardFeedParserContract};
 use near_sdk::json_types::{U128, U64};
-use near_sdk::Balance;
 use near_sdk_sim::init_simulator;
 use near_sdk_sim::runtime::GenesisConfig;
 use near_sdk_sim::ContractAccount;
@@ -15,27 +14,31 @@ near_sdk::setup_alloc!();
 
 const PROXY_ID: &str = "conversion_proxy";
 lazy_static_include::lazy_static_include_bytes! {
-   PROXY_BYTES => "target/wasm32-unknown-unknown/release/conversion_proxy.wasm"
+   pub PROXY_BYTES => "target/wasm32-unknown-unknown/release/conversion_proxy.wasm"
 }
 lazy_static_include::lazy_static_include_bytes! {
-   MOCKED_BYTES => "target/wasm32-unknown-unknown/debug/mocks.wasm"
+   pub MOCKED_BYTES => "target/wasm32-unknown-unknown/debug/mocks.wasm"
 }
 
 const DEFAULT_BALANCE: &str = "400000";
+const USD: &str = "USD";
+const PAYMENT_REF: &str = "0x1122334455667788";
 
-// Initialize test environment with 3 accounts (alice, bob, builder) and a conversion mock.
+// Initialize test environment with 3 accounts (alice, bob, builder), a conversion mock, and its owner account.
 fn init() -> (
     UserAccount,
     UserAccount,
     UserAccount,
     ContractAccount<ConversionProxyContract>,
+    UserAccount,
 ) {
-    let genesis = GenesisConfig::default();
+    let mut genesis = GenesisConfig::default();
+    genesis.gas_price = 0;
     let root = init_simulator(Some(genesis));
 
     deploy!(
-        contract: FPOContractContract,
-        contract_id: "mockedfpo".to_string(),
+        contract: SwitchboardFeedParserContract,
+        contract_id: "mockedswitchboard".to_string(),
         bytes: &MOCKED_BYTES,
         signer_account: root,
         deposit: to_yocto("7")
@@ -52,41 +55,41 @@ fn init() -> (
         contract_id: PROXY_ID,
         bytes: &PROXY_BYTES,
         signer_account: root,
-        deposit: to_yocto("10"),
-        init_method: new("mockedfpo".into(), "any".into())
+        deposit: to_yocto("5"),
+        init_method: new("mockedswitchboard".into(), &valid_feed_key())
     );
 
-    let get_oracle_result = call!(root, proxy.get_oracle_account());
-    get_oracle_result.assert_success();
+    let set_feed_payer_result = call!(root, proxy.set_feed_payer());
+    set_feed_payer_result.assert_success();
+    let get_parser_result = call!(root, proxy.get_feed_parser());
+    get_parser_result.assert_success();
 
     debug_assert_eq!(
-        &get_oracle_result.unwrap_json_value(),
-        &"mockedfpo".to_string()
+        &get_parser_result.unwrap_json_value().to_owned(),
+        &"mockedswitchboard".to_string()
     );
 
-    (account, empty_account_1, empty_account_2, proxy)
+    (account, empty_account_1, empty_account_2, proxy, root)
 }
 
 #[test]
 fn test_transfer() {
-    let (alice, bob, builder, proxy) = init();
+    let (alice, bob, builder, proxy, _) = init();
     let initial_alice_balance = alice.account().unwrap().amount;
     let initial_bob_balance = bob.account().unwrap().amount;
     let initial_builder_balance = builder.account().unwrap().amount;
     let transfer_amount = to_yocto("200000");
     let payment_address = bob.account_id().try_into().unwrap();
     let fee_address = builder.account_id().try_into().unwrap();
-    const ONE_NEAR: Balance = 1_000_000_000_000_000_000_000_000;
 
-    // Token transfer failed
     let result = call!(
         alice,
         proxy.transfer_with_reference(
-            "0x1122334455667788".to_string(),
+            PAYMENT_REF.into(),
             payment_address,
             // 12000.00 USD (main)
             U128::from(1200000),
-            String::from("USD"),
+            USD.into(),
             fee_address,
             // 1.00 USD (fee)
             U128::from(100),
@@ -96,21 +99,15 @@ fn test_transfer() {
     );
     result.assert_success();
 
-    println!(
-        "test_transfer_usd_near ==> TeraGas burnt: {}",
-        result.gas_burnt() as f64 / 1e12
-    );
-
     let alice_balance = alice.account().unwrap().amount;
     assert!(alice_balance < initial_alice_balance);
     let spent_amount = initial_alice_balance - alice_balance;
     // 12'001.00 USD worth of NEAR / 1.234
     let expected_spent = to_yocto("12001") * 1000 / 1234;
     assert!(
-        spent_amount - expected_spent < to_yocto("0.005"),
-        "Alice should spend 12'000 + 1 USD worth of NEAR (+ gas)",
+        yocto_almost_eq(spent_amount, expected_spent),
+        "Alice should spend 12'000 + 1 USD worth of NEAR. \nSpent:    {spent_amount}. \nExpected: {expected_spent}.",
     );
-    println!("diff: {}", (spent_amount - expected_spent) / ONE_NEAR);
 
     assert!(bob.account().unwrap().amount > initial_bob_balance);
     let received_amount = bob.account().unwrap().amount - initial_bob_balance;
@@ -118,14 +115,14 @@ fn test_transfer() {
         received_amount,
         // 12'000 USD / rate mocked
         to_yocto("12000") * 1000 / 1234,
-        "Bob should receive exactly 12000 USD worth of NEAR"
+        "Bob should receive exactly 12'000 USD worth of NEAR."
     );
 
     assert!(builder.account().unwrap().amount > initial_builder_balance);
     let received_amount = builder.account().unwrap().amount - initial_builder_balance;
     assert_eq!(
         received_amount,
-        // 1 USD
+        // 1 USD / rate mocked
         to_yocto("1") * 1000 / 1234,
         "Builder should receive exactly 1 USD worth of NEAR"
     );
@@ -135,7 +132,7 @@ fn test_transfer() {
 fn test_transfer_with_invalid_reference_length() {
     let transfer_amount = to_yocto("500");
 
-    let (alice, bob, builder, proxy) = init();
+    let (alice, bob, builder, proxy, _) = init();
     let payment_address = bob.account_id().try_into().unwrap();
     let fee_address = builder.account_id().try_into().unwrap();
 
@@ -146,30 +143,26 @@ fn test_transfer_with_invalid_reference_length() {
             "0x11223344556677".to_string(),
             payment_address,
             U128::from(12),
-            String::from("USD"),
+            USD.into(),
             fee_address,
             U128::from(1),
             U64::from(0)
         ),
         deposit = transfer_amount
     );
-    // No successful outcome is expected
-    assert!(!result.is_ok());
-
-    println!(
-        "test_transfer_with_invalid_parameter_length > TeraGas burnt: {}",
-        result.gas_burnt() as f64 / 1e12
-    );
-
-    assert_one_promise_error(result, "Incorrect payment reference length");
+    assert_one_promise_error(result.clone(), "Incorrect payment reference length");
 
     // Check Alice balance
-    assert_eq_with_gas(to_yocto(DEFAULT_BALANCE), alice.account().unwrap().amount);
+    assert_eq!(
+        to_yocto(DEFAULT_BALANCE),
+        alice.account().unwrap().amount,
+        "Alice should not spend NEAR on invalid payment.",
+    );
 }
 
 #[test]
 fn test_transfer_with_wrong_currency() {
-    let (alice, bob, builder, proxy) = init();
+    let (alice, bob, builder, proxy, _) = init();
     let transfer_amount = to_yocto("100");
     let payment_address = bob.account_id().try_into().unwrap();
     let fee_address = builder.account_id().try_into().unwrap();
@@ -178,7 +171,7 @@ fn test_transfer_with_wrong_currency() {
     let result = call!(
         alice,
         proxy.transfer_with_reference(
-            "0x1122334455667788".to_string(),
+            PAYMENT_REF.into(),
             payment_address,
             U128::from(1200),
             String::from("WRONG"),
@@ -188,12 +181,60 @@ fn test_transfer_with_wrong_currency() {
         ),
         deposit = transfer_amount
     );
-    assert_one_promise_error(result, "ERR_INVALID_ORACLE_RESPONSE");
+    assert_one_promise_error(
+        result,
+        "Only payments denominated in USD are implemented for now",
+    );
+}
+
+#[test]
+fn test_transfer_with_low_deposit() {
+    let (alice, bob, builder, proxy, _) = init();
+    let initial_alice_balance = alice.account().unwrap().amount;
+    let initial_bob_balance = bob.account().unwrap().amount;
+    let initial_contract_balance = proxy.account().unwrap().amount;
+    let transfer_amount = to_yocto("1000");
+    let payment_address = bob.account_id().try_into().unwrap();
+    let fee_address = builder.account_id().try_into().unwrap();
+
+    let result = call!(
+        alice,
+        proxy.transfer_with_reference(
+            PAYMENT_REF.into(),
+            payment_address,
+            U128::from(2000000),
+            USD.into(),
+            fee_address,
+            U128::from(0),
+            U64::from(0)
+        ),
+        deposit = transfer_amount
+    );
+    result.assert_success();
+    assert_eq!(result.logs().len(), 1, "Wrong number of logs");
+    assert!(result.logs()[0].contains("Deposit too small for payment"));
+
+    assert_eq!(
+        alice.account().unwrap().amount,
+        initial_alice_balance,
+        "Alice should not spend NEAR on a failed payment.",
+    );
+
+    assert_eq!(
+        proxy.account().unwrap().amount,
+        initial_contract_balance,
+        "Contract's balance should be unchanged"
+    );
+    assert_eq!(
+        builder.account().unwrap().amount,
+        initial_bob_balance,
+        "Builder's balance should be unchanged"
+    );
 }
 
 #[test]
 fn test_transfer_zero_usd() {
-    let (alice, bob, builder, proxy) = init();
+    let (alice, bob, builder, proxy, _) = init();
     let initial_alice_balance = alice.account().unwrap().amount;
     let initial_bob_balance = bob.account().unwrap().amount;
     let transfer_amount = to_yocto("100");
@@ -203,10 +244,10 @@ fn test_transfer_zero_usd() {
     let result = call!(
         alice,
         proxy.transfer_with_reference(
-            "0x1122334455667788".to_string(),
+            PAYMENT_REF.into(),
             payment_address,
             U128::from(0),
-            String::from("USD"),
+            USD.into(),
             fee_address,
             U128::from(0),
             U64::from(0)
@@ -216,11 +257,9 @@ fn test_transfer_zero_usd() {
     result.assert_success();
 
     let alice_balance = alice.account().unwrap().amount;
-    assert!(alice_balance < initial_alice_balance);
-    let spent_amount = initial_alice_balance - alice_balance;
-    assert!(
-        spent_amount < to_yocto("0.005"),
-        "Alice should not spend NEAR on a 0 USD payment",
+    assert_eq!(
+        initial_alice_balance, alice_balance,
+        "Alice should not spend NEAR on a 0 USD payment.",
     );
 
     assert!(
@@ -235,7 +274,7 @@ fn test_transfer_zero_usd() {
 
 #[test]
 fn test_outdated_rate() {
-    let (alice, bob, builder, proxy) = init();
+    let (alice, bob, builder, proxy, _) = init();
     let transfer_amount = to_yocto("100");
     let payment_address = bob.account_id().try_into().unwrap();
     let fee_address = builder.account_id().try_into().unwrap();
@@ -243,10 +282,10 @@ fn test_outdated_rate() {
     let result = call!(
         alice,
         proxy.transfer_with_reference(
-            "0x1122334455667788".to_string(),
+            PAYMENT_REF.into(),
             payment_address,
             U128::from(0),
-            String::from("USD"),
+            USD.into(),
             fee_address,
             U128::from(0),
             // The mocked rate is 10 nanoseconds old
