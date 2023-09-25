@@ -66,7 +66,7 @@ else
   
   if [ "$contract_name" = "conversion_proxy" ]; then
     if [ "$NEAR_ENV" = "mainnet" ]; then
-      feed_parser="switchboard-v2.mainnet";
+      feed_parser="switchboard-v2.near";
       feed_address="C3p8SSWQS8j1nx7HrzBBphX5jZcS1EY28EJ5iwjzSix2";
     else
       feed_parser="switchboard-v2.testnet";
