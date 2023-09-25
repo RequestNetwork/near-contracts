@@ -353,12 +353,12 @@ impl ConversionProxy {
         if u64::from(max_rate_timespan) != 0
             && rate.round_open_timestamp < env::block_timestamp() - u64::from(max_rate_timespan)
         {
-            Promise::new(payer.clone().to_string()).transfer(env::attached_deposit());
-            log!(
-                "Conversion rate too old (Last updated: {})",
-                rate.round_open_timestamp,
+            return self.refund_then_log(
+                payer,
+                "Conversion rate too old (Last updated: ".to_string()
+                    + &rate.round_open_timestamp.to_string()
+                    + &")",
             );
-            return 0_u128;
         }
         let conversion_rate = 0_u128
             .checked_add_signed(rate.result.mantissa)
