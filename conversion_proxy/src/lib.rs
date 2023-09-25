@@ -350,13 +350,16 @@ impl ConversionProxy {
             );
         }
         // Check rate validity
-        assert!(
-            u64::from(max_rate_timespan) == 0
-                || rate.round_open_timestamp
-                    >= env::block_timestamp() - u64::from(max_rate_timespan),
-            "Conversion rate too old (Last updated: {})",
-            rate.round_open_timestamp,
-        );
+        if u64::from(max_rate_timespan) != 0
+            && rate.round_open_timestamp < env::block_timestamp() - u64::from(max_rate_timespan)
+        {
+            return self.refund_then_log(
+                payer,
+                "Conversion rate too old (Last updated: ".to_string()
+                    + &rate.round_open_timestamp.to_string()
+                    + &")",
+            );
+        }
         let conversion_rate = 0_u128
             .checked_add_signed(rate.result.mantissa)
             .expect("The conversion rate should be positive");

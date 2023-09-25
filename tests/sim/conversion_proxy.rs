@@ -106,7 +106,7 @@ fn test_transfer() {
     let expected_spent = to_yocto("12001") * 1000 / 1234;
     assert!(
         yocto_almost_eq(spent_amount, expected_spent),
-        "Alice should spend 12'000 + 1 USD worth of NEAR. \nSpent:    {spent_amount}. \nExpected: {expected_spent}.",
+        "\nSpent:    {spent_amount} \nExpected: {expected_spent} : Alice should have spent 12'000 + 1 USD worth of NEAR.",
     );
 
     assert!(bob.account().unwrap().amount > initial_bob_balance);
@@ -275,6 +275,8 @@ fn test_transfer_zero_usd() {
 #[test]
 fn test_outdated_rate() {
     let (alice, bob, builder, proxy, _) = init();
+    let initial_alice_balance = alice.account().unwrap().amount;
+    let initial_proxy_balance = proxy.account().unwrap().amount;
     let transfer_amount = to_yocto("100");
     let payment_address = bob.account_id().try_into().unwrap();
     let fee_address = builder.account_id().try_into().unwrap();
@@ -284,7 +286,7 @@ fn test_outdated_rate() {
         proxy.transfer_with_reference(
             PAYMENT_REF.into(),
             payment_address,
-            U128::from(0),
+            U128::from(120000),
             USD.into(),
             fee_address,
             U128::from(0),
@@ -293,5 +295,18 @@ fn test_outdated_rate() {
         ),
         deposit = transfer_amount
     );
-    assert_one_promise_error(result, "Conversion rate too old");
+    result.assert_success();
+    assert_eq!(result.logs().len(), 1, "Wrong number of logs");
+    assert!(result.logs()[0].contains("Conversion rate too old"));
+
+    assert_eq!(
+        initial_proxy_balance,
+        proxy.account().unwrap().amount,
+        "Contract's balance should be unchanged"
+    );
+    assert_eq!(
+        initial_alice_balance,
+        alice.account().unwrap().amount,
+        "Alice should not spend NEAR on an outdated rate payment.",
+    );
 }
