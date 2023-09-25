@@ -344,7 +344,7 @@ fn test_outdated_rate() {
         ),
         deposit = transfer_amount
     );
-    result.assert_one_promise_error("Conversion rate too old");
+    result.assert_success_one_log("Conversion rate too old");
 
     assert_eq!(
         initial_proxy_balance,
