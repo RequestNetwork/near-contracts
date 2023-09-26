@@ -66,32 +66,38 @@ pub fn assert_received(
     );
 }
 
-pub fn assert_one_promise_error(promise_result: ExecutionResult, expected_error_message: &str) {
-    assert!(
-        !promise_result.is_ok(),
-        "Promise succeeded, expected to fail."
-    );
-    assert_eq!(
-        promise_result.promise_errors().len(),
-        1,
-        "Expected 1 error, got {}",
-        promise_result.promise_errors().len()
-    );
+pub trait ExecutionResultAssertion {
+    fn assert_one_promise_error(&self, expected_error: &str);
+    fn assert_success_one_log(&self, expected_log: &str);
+}
 
-    if let ExecutionStatus::Failure(execution_error) = &promise_result
-        .promise_errors()
-        .remove(0)
-        .unwrap()
-        .outcome()
-        .status
-    {
-        assert!(
-            execution_error.to_string().contains(expected_error_message),
-            "Expected error containing: '{}'. Got: '{}'",
-            expected_error_message,
-            execution_error.to_string()
+impl ExecutionResultAssertion for ExecutionResult {
+    fn assert_one_promise_error(&self, expected_error: &str) {
+        assert!(!self.is_ok(), "Promise succeeded, expected to fail.");
+        assert_eq!(
+            self.promise_errors().len(),
+            1,
+            "Expected 1 error, got {}",
+            self.promise_errors().len()
         );
-    } else {
-        unreachable!();
+
+        if let ExecutionStatus::Failure(execution_error) =
+            &self.promise_errors().remove(0).unwrap().outcome().status
+        {
+            assert!(
+                execution_error.to_string().contains(expected_error),
+                "Expected error containing: '{}'. Got: '{}'",
+                expected_error,
+                execution_error.to_string()
+            );
+        } else {
+            unreachable!();
+        }
+    }
+
+    fn assert_success_one_log(&self, expected_log: &str) {
+        self.assert_success();
+        assert_eq!(self.logs().len(), 1, "Wrong number of logs");
+        assert!(self.logs()[0].contains(&expected_log));
     }
 }

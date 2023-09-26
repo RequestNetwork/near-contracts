@@ -150,7 +150,7 @@ fn test_transfer_with_invalid_reference_length() {
         ),
         deposit = transfer_amount
     );
-    assert_one_promise_error(result.clone(), "Incorrect payment reference length");
+    result.assert_one_promise_error("Incorrect payment reference length");
 
     // Check Alice balance
     assert_eq!(
@@ -181,10 +181,7 @@ fn test_transfer_with_wrong_currency() {
         ),
         deposit = transfer_amount
     );
-    assert_one_promise_error(
-        result,
-        "Only payments denominated in USD are implemented for now",
-    );
+    result.assert_one_promise_error("Only payments denominated in USD are implemented for now");
 }
 
 #[test]
@@ -210,14 +207,65 @@ fn test_transfer_with_low_deposit() {
         ),
         deposit = transfer_amount
     );
-    result.assert_success();
-    assert_eq!(result.logs().len(), 1, "Wrong number of logs");
-    assert!(result.logs()[0].contains("Deposit too small for payment"));
+    result.assert_success_one_log("Deposit too small for payment");
 
     assert_eq!(
         alice.account().unwrap().amount,
         initial_alice_balance,
         "Alice should not spend NEAR on a failed payment.",
+    );
+
+    assert_eq!(
+        proxy.account().unwrap().amount,
+        initial_contract_balance,
+        "Contract's balance should be unchanged"
+    );
+    assert_eq!(
+        builder.account().unwrap().amount,
+        initial_bob_balance,
+        "Builder's balance should be unchanged"
+    );
+}
+
+#[test]
+fn test_transfer_with_wrong_feed_address() {
+    let (alice, bob, builder, proxy, root) = init();
+
+    let result = call!(alice, proxy.get_encoded_feed_address());
+    result.assert_success();
+
+    let result = call!(
+        root,
+        proxy.set_feed_address(&"7igqhpGQ8xPpyjQ4gMHhXRvtZcrKSGJkdKDJYBiPQgcb".to_string())
+    );
+    result.assert_success();
+
+    let initial_alice_balance = alice.account().unwrap().amount;
+    let initial_bob_balance = bob.account().unwrap().amount;
+    let initial_contract_balance = proxy.account().unwrap().amount;
+    let transfer_amount = to_yocto("100000");
+    let payment_address = bob.account_id().try_into().unwrap();
+    let fee_address = builder.account_id().try_into().unwrap();
+
+    let result = call!(
+        alice,
+        proxy.transfer_with_reference(
+            PAYMENT_REF.into(),
+            payment_address,
+            U128::from(2000000),
+            USD.into(),
+            fee_address,
+            U128::from(0),
+            U64::from(0)
+        ),
+        deposit = transfer_amount
+    );
+    result.assert_success_one_log("ERR_FAILED_ORACLE_FETCH");
+
+    assert_eq!(
+        alice.account().unwrap().amount,
+        initial_alice_balance,
+        "Alice should not spend NEAR on a wrong feed address payment.",
     );
 
     assert_eq!(
@@ -295,9 +343,7 @@ fn test_outdated_rate() {
         ),
         deposit = transfer_amount
     );
-    result.assert_success();
-    assert_eq!(result.logs().len(), 1, "Wrong number of logs");
-    assert!(result.logs()[0].contains("Conversion rate too old"));
+    result.assert_success_one_log("Conversion rate too old");
 
     assert_eq!(
         initial_proxy_balance,
