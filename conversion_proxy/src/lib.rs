@@ -322,7 +322,6 @@ impl ConversionProxy {
     ) -> u128 {
         let (main_payment, flag) = (Balance::from(amount) * ONE_NEAR / ONE_FIAT / precision)
             .overflowing_mul(10u128.pow(u32::from(decimals)));
-        let main_payment = main_payment / conversion_rate * precision;
         if flag {
             return Self::apply_conversion_with_precision(
                 amount,
@@ -331,6 +330,7 @@ impl ConversionProxy {
                 precision * 10,
             );
         }
+        let main_payment = main_payment / conversion_rate * precision;
         return main_payment;
     }
 
