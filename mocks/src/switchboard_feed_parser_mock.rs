@@ -47,8 +47,8 @@ impl SwitchboardFeedParser {
         match ix.address {
             VALID_FEED_ADDRESS => Some(PriceEntry {
                 result: SwitchboardDecimal {
-                    mantissa: i128::from(1234000),
-                    scale: u8::from(6).into(),
+                    mantissa: i128::from(1234000000),
+                    scale: u8::from(9).into(),
                 },
                 num_success: 1,
                 num_error: 0,
@@ -106,8 +106,8 @@ mod tests {
             address: [0; 32],
             payer: [1; 32],
         }) {
-            assert_eq!(result.result.mantissa, i128::from(1234000));
-            assert_eq!(result.result.scale, 6);
+            assert_eq!(result.result.mantissa, i128::from(1234000000));
+            assert_eq!(result.result.scale, 9);
         } else {
             panic!("NEAR/USD mock returned None")
         }
