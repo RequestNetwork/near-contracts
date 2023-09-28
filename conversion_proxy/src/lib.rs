@@ -330,7 +330,7 @@ impl ConversionProxy {
                 precision * 10,
             );
         }
-        let main_payment = main_payment / conversion_rate * precision;
+        let main_payment = main_payment * precision / conversion_rate;
         return main_payment;
     }
 
