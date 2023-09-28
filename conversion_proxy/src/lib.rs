@@ -310,6 +310,9 @@ impl ConversionProxy {
         return 0_u128;
     }
 
+    /// Recursive util to convert an `amount` with a `converion_rate` having `decimals`.
+    /// The `precision` is used to work around overflows, a precision of 10^n means that the result has a precision of n yocto digits.
+    /// Said another way, a precision of 1000 will give a result rounded to the closest 1000 yoctos, ending with "...000" in yocto.
     #[private]
     pub fn apply_conversion_with_precision(
         amount: U128,
@@ -317,23 +320,16 @@ impl ConversionProxy {
         conversion_rate: u128,
         precision: u128,
     ) -> u128 {
-        let ratio = ONE_NEAR / ONE_FIAT / precision;
-        let (main_payment, flag) =
-            (Balance::from(amount) * ratio).overflowing_mul(10u128.pow(u32::from(decimals)));
+        let (main_payment, flag) = (Balance::from(amount) * ONE_NEAR / ONE_FIAT / precision)
+            .overflowing_mul(10u128.pow(u32::from(decimals)));
         let main_payment = main_payment / conversion_rate * precision;
-        println!("{precision}");
         if flag {
-            println!("{precision} * 10");
             return Self::apply_conversion_with_precision(
                 amount,
                 decimals,
                 conversion_rate,
                 precision * 10,
             );
-            // return self.refund_then_log(
-            //     payer,
-            //     "Amount is too high for this conversion, it would overflow".to_string(),
-            // );
         }
         return main_payment;
     }
