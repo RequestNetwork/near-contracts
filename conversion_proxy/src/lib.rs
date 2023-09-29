@@ -310,6 +310,35 @@ impl ConversionProxy {
         return 0_u128;
     }
 
+    /// Recursive util to convert an `amount` with a `converion_rate` having `decimals`.
+    /// The `precision` is used to work around overflows, a precision of 10^n means that the result has a precision of n yocto digits.
+    /// Said another way, a precision of 1000 will give a result rounded to the closest 1000 yoctos, ending with "...000" in yocto.
+    #[private]
+    pub fn apply_conversion_with_precision(
+        amount: U128,
+        decimals: u32,
+        conversion_rate: u128,
+        precision: u128,
+    ) -> u128 {
+        let (main_payment, flag) = (Balance::from(amount) * ONE_NEAR / ONE_FIAT / precision)
+            .overflowing_mul(10u128.pow(u32::from(decimals)));
+        if flag {
+            return Self::apply_conversion_with_precision(
+                amount,
+                decimals,
+                conversion_rate,
+                precision * 10,
+            );
+        }
+        let main_payment = (main_payment / conversion_rate) * precision;
+        return main_payment;
+    }
+
+    #[private]
+    pub fn apply_conversion(amount: U128, decimals: u32, conversion_rate: u128) -> u128 {
+        return Self::apply_conversion_with_precision(amount, decimals, conversion_rate, 1);
+    }
+
     #[private]
     #[payable]
     pub fn rate_callback(
@@ -363,13 +392,8 @@ impl ConversionProxy {
         let conversion_rate = 0_u128
             .checked_add_signed(rate.result.mantissa)
             .expect("The conversion rate should be positive");
-        let decimals = u32::from(rate.result.scale);
-        let main_payment = (Balance::from(amount) * ONE_NEAR * 10u128.pow(decimals)
-            / conversion_rate
-            / ONE_FIAT) as u128;
-        let fee_payment = Balance::from(fee_amount) * ONE_NEAR * 10u128.pow(decimals)
-            / conversion_rate
-            / ONE_FIAT;
+        let main_payment = Self::apply_conversion(amount, rate.result.scale, conversion_rate);
+        let fee_payment = Self::apply_conversion(fee_amount, rate.result.scale, conversion_rate);
 
         let total_payment = main_payment + fee_payment;
         // Check deposit

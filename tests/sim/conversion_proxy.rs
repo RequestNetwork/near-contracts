@@ -228,6 +228,65 @@ fn test_transfer_with_low_deposit() {
 }
 
 #[test]
+fn test_transfer_high_amounts() {
+    let (alice, bob, builder, proxy, root) = init();
+    let transfer_amount = to_yocto("20000000");
+    // This high amount require a balance greater than the default one
+    root.transfer(alice.account_id(), transfer_amount);
+    let initial_alice_balance = alice.account().unwrap().amount;
+    let initial_bob_balance = bob.account().unwrap().amount;
+    let initial_builder_balance = builder.account().unwrap().amount;
+    let payment_address = bob.account_id().try_into().unwrap();
+    let fee_address = builder.account_id().try_into().unwrap();
+
+    let result = call!(
+        alice,
+        proxy.transfer_with_reference(
+            PAYMENT_REF.into(),
+            payment_address,
+            // 1'200'00.00 USD (main)
+            U128::from(120000000),
+            USD.into(),
+            fee_address,
+            // 1.00 USD (fee)
+            U128::from(100),
+            U64::from(0)
+        ),
+        deposit = transfer_amount
+    );
+    result.assert_success();
+    println!("{:?}", result);
+
+    let alice_balance = alice.account().unwrap().amount;
+    assert!(alice_balance < initial_alice_balance);
+    let spent_amount = initial_alice_balance - alice_balance;
+    // 1'200'001.00 USD worth of NEAR / 1.234
+    let expected_spent = to_yocto("1200001") * 1000 / 1234;
+    assert!(
+        yocto_almost_eq(spent_amount, expected_spent),
+        "\nSpent:    {spent_amount} \nExpected: {expected_spent} : Alice should have spent 1'200'000 + 1 USD worth of NEAR.",
+    );
+
+    assert!(bob.account().unwrap().amount > initial_bob_balance);
+    let received_amount = bob.account().unwrap().amount - initial_bob_balance;
+    assert_eq!(
+        received_amount,
+        // 1'200'000 USD / rate mocked
+        to_yocto("1200000") * 1000 / 1234,
+        "Bob should receive exactly 1'200'000 USD worth of NEAR."
+    );
+
+    assert!(builder.account().unwrap().amount > initial_builder_balance);
+    let received_amount = builder.account().unwrap().amount - initial_builder_balance;
+    assert_eq!(
+        received_amount,
+        // 1 USD / rate mocked
+        to_yocto("1") * 1000 / 1234,
+        "Builder should receive exactly 1 USD worth of NEAR"
+    );
+}
+
+#[test]
 fn test_transfer_with_wrong_feed_address() {
     let (alice, bob, builder, proxy, root) = init();
 
